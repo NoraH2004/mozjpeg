@@ -35,20 +35,19 @@
 #ifdef CJPEG_FUZZER
 #define JPEG_INTERNALS
 #endif
-#include "cdjpeg.h"             /* Common decls for cjpeg/djpeg applications */
-#include "jversion.h"           /* for version message */
+#include "cdjpeg.h"   /* Common decls for cjpeg/djpeg applications */
+#include "jversion.h" /* for version message */
 #include "jconfigint.h"
 
+#include "report.h" //nh
 
 /* Create the add-on message string table. */
 
-#define JMESSAGE(code, string)  string,
+#define JMESSAGE(code, string) string,
 
-static const char * const cdjpeg_message_table[] = {
+static const char *const cdjpeg_message_table[] = {
 #include "cderror.h"
-  NULL
-};
-
+    NULL};
 
 /*
  * This routine determines what format the input file is,
@@ -76,7 +75,7 @@ static const char * const cdjpeg_message_table[] = {
  * seldom-used ID field), so we provide a switch to force Targa input mode.
  */
 
-static boolean is_targa;        /* records user -targa switch */
+static boolean is_targa; /* records user -targa switch */
 static boolean is_jpeg;
 static boolean copy_markers;
 
@@ -85,7 +84,8 @@ select_file_type(j_compress_ptr cinfo, FILE *infile)
 {
   int c;
 
-  if (is_targa) {
+  if (is_targa)
+  {
 #ifdef TARGA_SUPPORTED
     return jinit_read_targa(cinfo);
 #else
@@ -98,7 +98,8 @@ select_file_type(j_compress_ptr cinfo, FILE *infile)
   if (ungetc(c, infile) == EOF)
     ERREXIT(cinfo, JERR_UNGETC_FAILED);
 
-  switch (c) {
+  switch (c)
+  {
 #ifdef BMP_SUPPORTED
   case 'B':
     return jinit_read_bmp(cinfo, TRUE);
@@ -129,9 +130,8 @@ select_file_type(j_compress_ptr cinfo, FILE *infile)
     break;
   }
 
-  return NULL;                  /* suppress compiler warnings */
+  return NULL; /* suppress compiler warnings */
 }
-
 
 /*
  * Argument-parsing code.
@@ -141,20 +141,19 @@ select_file_type(j_compress_ptr cinfo, FILE *infile)
  * The main program in this file doesn't actually use this capability...
  */
 
-
-static const char *progname;    /* program name for error messages */
-static char *icc_filename;      /* for -icc switch */
-static char *outfilename;       /* for -outfile switch */
-boolean memdst;                 /* for -memdst switch */
-boolean report;                 /* for -report switch */
-boolean strict;                 /* for -strict switch */
-
+static const char *progname; /* program name for error messages */
+static char *icc_filename;   /* for -icc switch */
+static char *outfilename;    /* for -outfile switch */
+boolean memdst;              /* for -memdst switch */
+boolean report;              /* for -report switch */
+boolean strict;              /* for -strict switch */
 
 #ifdef CJPEG_FUZZER
 
 #include <setjmp.h>
 
-struct my_error_mgr {
+struct my_error_mgr
+{
   struct jpeg_error_mgr pub;
   jmp_buf setjmp_buffer;
 };
@@ -172,22 +171,23 @@ static void my_emit_message_fuzzer(j_common_ptr cinfo, int msg_level)
     cinfo->err->num_warnings++;
 }
 
-#define HANDLE_ERROR() { \
-  if (cinfo.global_state > CSTATE_START) { \
-    if (memdst && outbuffer) \
-      (*cinfo.dest->term_destination) (&cinfo); \
-    jpeg_abort_compress(&cinfo); \
-  } \
-  jpeg_destroy_compress(&cinfo); \
-  if (input_file != stdin && input_file != NULL) \
-    fclose(input_file); \
-  if (memdst) \
-    free(outbuffer); \
-  return EXIT_FAILURE; \
-}
+#define HANDLE_ERROR()                             \
+  {                                                \
+    if (cinfo.global_state > CSTATE_START)         \
+    {                                              \
+      if (memdst && outbuffer)                     \
+        (*cinfo.dest->term_destination)(&cinfo);   \
+      jpeg_abort_compress(&cinfo);                 \
+    }                                              \
+    jpeg_destroy_compress(&cinfo);                 \
+    if (input_file != stdin && input_file != NULL) \
+      fclose(input_file);                          \
+    if (memdst)                                    \
+      free(outbuffer);                             \
+    return EXIT_FAILURE;                           \
+  }
 
 #endif
-
 
 LOCAL(void)
 usage(void)
@@ -282,7 +282,6 @@ usage(void)
   exit(EXIT_FAILURE);
 }
 
-
 LOCAL(int)
 parse_switches(j_compress_ptr cinfo, int argc, char **argv,
                int last_file_arg_seen, boolean for_real)
@@ -299,15 +298,15 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
   char *arg;
   boolean force_baseline;
   boolean simple_progressive;
-  char *qualityarg = NULL;      /* saves -quality parm if any */
-  char *qtablefile = NULL;      /* saves -qtables filename if any */
-  char *qslotsarg = NULL;       /* saves -qslots parm if any */
-  char *samplearg = NULL;       /* saves -sample parm if any */
-  char *scansarg = NULL;        /* saves -scans parm if any */
+  char *qualityarg = NULL; /* saves -quality parm if any */
+  char *qtablefile = NULL; /* saves -qtables filename if any */
+  char *qslotsarg = NULL;  /* saves -qslots parm if any */
+  char *samplearg = NULL;  /* saves -sample parm if any */
+  char *scansarg = NULL;   /* saves -scans parm if any */
 
   /* Set up default JPEG parameters. */
 
-  force_baseline = FALSE;       /* by default, allow 16-bit quantizers */
+  force_baseline = FALSE; /* by default, allow 16-bit quantizers */
 #ifdef C_PROGRESSIVE_SUPPORTED
   simple_progressive = cinfo->num_scans == 0 ? FALSE : TRUE;
 #else
@@ -323,23 +322,27 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
 
   /* Scan command line options, adjust parameters */
 
-  for (argn = 1; argn < argc; argn++) {
+  for (argn = 1; argn < argc; argn++)
+  {
     arg = argv[argn];
-    if (*arg != '-') {
+    if (*arg != '-')
+    {
       /* Not a switch, must be a file name argument */
-      if (argn <= last_file_arg_seen) {
-        outfilename = NULL;     /* -outfile applies to just one input file */
-        continue;               /* ignore this name if previously processed */
+      if (argn <= last_file_arg_seen)
+      {
+        outfilename = NULL; /* -outfile applies to just one input file */
+        continue;           /* ignore this name if previously processed */
       }
-      break;                    /* else done parsing switches */
+      break; /* else done parsing switches */
     }
-    arg++;                      /* advance past switch marker character */
+    arg++; /* advance past switch marker character */
 
-    if (keymatch(arg, "arithmetic", 1)) {
+    if (keymatch(arg, "arithmetic", 1))
+    {
       /* Use arithmetic coding. */
 #ifdef C_ARITH_CODING_SUPPORTED
       cinfo->arith_code = TRUE;
-      
+
       /* No table optimization required for AC */
       cinfo->optimize_coding = FALSE;
 #else
@@ -347,38 +350,50 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "baseline", 1)) {
+    }
+    else if (keymatch(arg, "baseline", 1))
+    {
       /* Force baseline-compatible output (8-bit quantizer values). */
       force_baseline = TRUE;
       /* Disable multiple scans */
       simple_progressive = FALSE;
       cinfo->num_scans = 0;
       cinfo->scan_info = NULL;
-
-    } else if (keymatch(arg, "dct", 2)) {
+    }
+    else if (keymatch(arg, "dct", 2))
+    {
       /* Select DCT algorithm. */
-      if (++argn >= argc) {      /* advance to next argument */
+      if (++argn >= argc)
+      { /* advance to next argument */
         fprintf(stderr, "%s: missing argument for dct\n", progname);
         usage();
       }
-      if (keymatch(argv[argn], "int", 1)) {
+      if (keymatch(argv[argn], "int", 1))
+      {
         cinfo->dct_method = JDCT_ISLOW;
-      } else if (keymatch(argv[argn], "fast", 2)) {
+      }
+      else if (keymatch(argv[argn], "fast", 2))
+      {
         cinfo->dct_method = JDCT_IFAST;
-      } else if (keymatch(argv[argn], "float", 2)) {
+      }
+      else if (keymatch(argv[argn], "float", 2))
+      {
         cinfo->dct_method = JDCT_FLOAT;
-      } else {
+      }
+      else
+      {
         fprintf(stderr, "%s: invalid argument for dct\n", progname);
         usage();
       }
-
-    } else if (keymatch(arg, "debug", 1) || keymatch(arg, "verbose", 1)) {
+    }
+    else if (keymatch(arg, "debug", 1) || keymatch(arg, "verbose", 1))
+    {
       /* Enable debug printouts. */
       /* On first -d, print version identification */
       static boolean printed_version = FALSE;
 
-      if (!printed_version) {
+      if (!printed_version)
+      {
         fprintf(stderr, "%s version %s (build %s)\n",
                 PACKAGE_NAME, VERSION, BUILD);
         fprintf(stderr, "%s\n\n", JCOPYRIGHT);
@@ -387,62 +402,73 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
         printed_version = TRUE;
       }
       cinfo->err->trace_level++;
-
-    } else if (keymatch(arg, "version", 4)) {
+    }
+    else if (keymatch(arg, "version", 4))
+    {
       fprintf(stderr, "%s version %s (build %s)\n",
               PACKAGE_NAME, VERSION, BUILD);
       exit(EXIT_SUCCESS);
-
-    } else if (keymatch(arg, "fastcrush", 4)) {
+    }
+    else if (keymatch(arg, "fastcrush", 4))
+    {
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_OPTIMIZE_SCANS, FALSE);
-
-    } else if (keymatch(arg, "grayscale", 2) || keymatch(arg, "greyscale",2)) {
+    }
+    else if (keymatch(arg, "grayscale", 2) || keymatch(arg, "greyscale", 2))
+    {
       /* Force a monochrome JPEG file to be generated. */
       jpeg_set_colorspace(cinfo, JCS_GRAYSCALE);
-
-    } else if (keymatch(arg, "rgb", 3)) {
+    }
+    else if (keymatch(arg, "rgb", 3))
+    {
       /* Force an RGB JPEG file to be generated. */
       jpeg_set_colorspace(cinfo, JCS_RGB);
-
-    } else if (keymatch(arg, "lambda1", 7)) {
-      if (++argn >= argc)       /* advance to next argument */
+    }
+    else if (keymatch(arg, "lambda1", 7))
+    {
+      if (++argn >= argc) /* advance to next argument */
         usage();
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE1,
                              atof(argv[argn]));
-
-    } else if (keymatch(arg, "lambda2", 7)) {
-      if (++argn >= argc)       /* advance to next argument */
+    }
+    else if (keymatch(arg, "lambda2", 7))
+    {
+      if (++argn >= argc) /* advance to next argument */
         usage();
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE2,
                              atof(argv[argn]));
-
-    } else if (keymatch(arg, "icc", 1)) {
+    }
+    else if (keymatch(arg, "icc", 1))
+    {
       /* Set ICC filename. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       icc_filename = argv[argn];
-
-    } else if (keymatch(arg, "maxmemory", 3)) {
+    }
+    else if (keymatch(arg, "maxmemory", 3))
+    {
       /* Maximum memory in Kb (or Mb with 'm'). */
       long lval;
       char ch = 'x';
 
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%ld%c", &lval, &ch) < 1)
         usage();
       if (ch == 'm' || ch == 'M')
         lval *= 1000L;
       cinfo->mem->max_memory_to_use = lval * 1000L;
-
-    } else if (keymatch(arg, "dc-scan-opt", 3)) {
-      if (++argn >= argc) {      /* advance to next argument */
+    }
+    else if (keymatch(arg, "dc-scan-opt", 3))
+    {
+      if (++argn >= argc)
+      { /* advance to next argument */
         fprintf(stderr, "%s: missing argument for dc-scan-opt\n", progname);
         usage();
       }
       jpeg_c_set_int_param(cinfo, JINT_DC_SCAN_OPT_MODE, atoi(argv[argn]));
-
-    } else if (keymatch(arg, "optimize", 1) || keymatch(arg, "optimise", 1)) {
+    }
+    else if (keymatch(arg, "optimize", 1) || keymatch(arg, "optimise", 1))
+    {
       /* Enable entropy parm optimization. */
 #ifdef ENTROPY_OPT_SUPPORTED
       cinfo->optimize_coding = TRUE;
@@ -451,16 +477,19 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "outfile", 4)) {
+    }
+    else if (keymatch(arg, "outfile", 4))
+    {
       /* Set output file name. */
-      if (++argn >= argc) {      /* advance to next argument */
+      if (++argn >= argc)
+      { /* advance to next argument */
         fprintf(stderr, "%s: missing argument for outfile\n", progname);
         usage();
       }
       outfilename = argv[argn]; /* save it away for later use */
-
-    } else if (keymatch(arg, "progressive", 1)) {
+    }
+    else if (keymatch(arg, "progressive", 1))
+    {
       /* Select simple progressive mode. */
 #ifdef C_PROGRESSIVE_SUPPORTED
       simple_progressive = TRUE;
@@ -470,8 +499,9 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "memdst", 2)) {
+    }
+    else if (keymatch(arg, "memdst", 2))
+    {
       /* Use in-memory destination manager */
 #if JPEG_LIB_VERSION >= 80 || defined(MEM_SRCDST_SUPPORTED)
       memdst = TRUE;
@@ -480,88 +510,104 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "quality", 1)) {
+    }
+    else if (keymatch(arg, "quality", 1))
+    {
       /* Quality ratings (quantization table scaling factors). */
-      if (++argn >= argc) {      /* advance to next argument */
+      if (++argn >= argc)
+      { /* advance to next argument */
         fprintf(stderr, "%s: missing argument for quality\n", progname);
         usage();
       }
       qualityarg = argv[argn];
-
-    } else if (keymatch(arg, "qslots", 2)) {
+    }
+    else if (keymatch(arg, "qslots", 2))
+    {
       /* Quantization table slot numbers. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       qslotsarg = argv[argn];
       /* Must delay setting qslots until after we have processed any
        * colorspace-determining switches, since jpeg_set_colorspace sets
        * default quant table numbers.
        */
-
-    } else if (keymatch(arg, "qtables", 2)) {
+    }
+    else if (keymatch(arg, "qtables", 2))
+    {
       /* Quantization tables fetched from file. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       qtablefile = argv[argn];
       /* We postpone actually reading the file in case -quality comes later. */
-
-    } else if (keymatch(arg, "report", 3)) {
+    }
+    else if (keymatch(arg, "report", 3))
+    {
       report = TRUE;
-    } else if (keymatch(arg, "quant-table", 7)) {
+    }
+    else if (keymatch(arg, "quant-table", 7))
+    {
       int val;
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       val = atoi(argv[argn]);
       jpeg_c_set_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX, val);
-      if (jpeg_c_get_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX) != val) {
+      if (jpeg_c_get_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX) != val)
+      {
         fprintf(stderr, "%s: %d is invalid argument for quant-table\n", progname, val);
         usage();
       }
       jpeg_set_quality(cinfo, 75, TRUE);
-
-    } else if (keymatch(arg, "quant-baseline", 7)) {
+    }
+    else if (keymatch(arg, "quant-baseline", 7))
+    {
       /* Force quantization table to meet baseline requirements */
       force_baseline = TRUE;
-
-    } else if (keymatch(arg, "restart", 1)) {
+    }
+    else if (keymatch(arg, "restart", 1))
+    {
       /* Restart interval in MCU rows (or in MCUs with 'b'). */
       long lval;
       char ch = 'x';
 
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%ld%c", &lval, &ch) < 1)
         usage();
       if (lval < 0 || lval > 65535L)
         usage();
-      if (ch == 'b' || ch == 'B') {
+      if (ch == 'b' || ch == 'B')
+      {
         cinfo->restart_interval = (unsigned int)lval;
         cinfo->restart_in_rows = 0; /* else prior '-restart n' overrides me */
-      } else {
+      }
+      else
+      {
         cinfo->restart_in_rows = (int)lval;
         /* restart_interval will be computed during startup */
       }
-
-    } else if (keymatch(arg, "revert", 3)) {
+    }
+    else if (keymatch(arg, "revert", 3))
+    {
       /* revert to old JPEG default */
       jpeg_c_set_int_param(cinfo, JINT_COMPRESS_PROFILE, JCP_FASTEST);
       jpeg_set_defaults(cinfo);
-
-    } else if (keymatch(arg, "sample", 2)) {
+    }
+    else if (keymatch(arg, "sample", 2))
+    {
       /* Set sampling factors. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       samplearg = argv[argn];
       /* Must delay setting sample factors until after we have processed any
        * colorspace-determining switches, since jpeg_set_colorspace sets
        * default sampling factors.
        */
-
-    } else if (keymatch(arg, "scans", 4)) {
+    }
+    else if (keymatch(arg, "scans", 4))
+    {
       /* Set scan script. */
 #ifdef C_MULTISCAN_FILES_SUPPORTED
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       scansarg = argv[argn];
       /* We must postpone reading the file in case -progressive appears. */
@@ -570,149 +616,169 @@ parse_switches(j_compress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "smooth", 2)) {
+    }
+    else if (keymatch(arg, "smooth", 2))
+    {
       /* Set input smoothing factor. */
       int val;
 
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%d", &val) != 1)
         usage();
       if (val < 0 || val > 100)
         usage();
       cinfo->smoothing_factor = val;
-
-    } else if (keymatch(arg, "strict", 2)) {
+    }
+    else if (keymatch(arg, "strict", 2))
+    {
       strict = TRUE;
-
-    } else if (keymatch(arg, "targa", 1)) {
+    }
+    else if (keymatch(arg, "targa", 1))
+    {
       /* Input file is Targa format. */
       is_targa = TRUE;
-
-    } else if (keymatch(arg, "notrellis-dc", 11)) {
+    }
+    else if (keymatch(arg, "notrellis-dc", 11))
+    {
       /* disable trellis quantization */
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_TRELLIS_QUANT_DC, FALSE);
-      
-    } else if (keymatch(arg, "notrellis", 1)) {
+    }
+    else if (keymatch(arg, "notrellis", 1))
+    {
       /* disable trellis quantization */
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_TRELLIS_QUANT, FALSE);
-      
-    } else if (keymatch(arg, "trellis-dc-ver-weight", 12)) {
-      if (++argn >= argc) {      /* advance to next argument */
+    }
+    else if (keymatch(arg, "trellis-dc-ver-weight", 12))
+    {
+      if (++argn >= argc)
+      { /* advance to next argument */
         fprintf(stderr, "%s: missing argument for trellis-dc-ver-weight\n", progname);
         usage();
       }
       jpeg_c_set_float_param(cinfo, JFLOAT_TRELLIS_DELTA_DC_WEIGHT, atof(argv[argn]));
-      
-    } else if (keymatch(arg, "trellis-dc", 9)) {
+    }
+    else if (keymatch(arg, "trellis-dc", 9))
+    {
       /* enable DC trellis quantization */
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_TRELLIS_QUANT_DC, TRUE);
-      
-    } else if (keymatch(arg, "tune-psnr", 6)) {
+    }
+    else if (keymatch(arg, "tune-psnr", 6))
+    {
       jpeg_c_set_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX, 1);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE1, 9.0);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE2, 0.0);
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_USE_LAMBDA_WEIGHT_TBL, FALSE);
       jpeg_set_quality(cinfo, 75, TRUE);
-      
-    } else if (keymatch(arg, "tune-ssim", 6)) {
+    }
+    else if (keymatch(arg, "tune-ssim", 6))
+    {
       jpeg_c_set_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX, 1);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE1, 11.5);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE2, 12.75);
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_USE_LAMBDA_WEIGHT_TBL, FALSE);
       jpeg_set_quality(cinfo, 75, TRUE);
-      
-    } else if (keymatch(arg, "tune-ms-ssim", 6)) {
+    }
+    else if (keymatch(arg, "tune-ms-ssim", 6))
+    {
       jpeg_c_set_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX, 3);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE1, 12.0);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE2, 13.0);
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_USE_LAMBDA_WEIGHT_TBL, TRUE);
       jpeg_set_quality(cinfo, 75, TRUE);
-      
-    } else if (keymatch(arg, "tune-hvs-psnr", 6)) {
+    }
+    else if (keymatch(arg, "tune-hvs-psnr", 6))
+    {
       jpeg_c_set_int_param(cinfo, JINT_BASE_QUANT_TBL_IDX, 3);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE1, 14.75);
       jpeg_c_set_float_param(cinfo, JFLOAT_LAMBDA_LOG_SCALE2, 16.5);
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_USE_LAMBDA_WEIGHT_TBL, TRUE);
       jpeg_set_quality(cinfo, 75, TRUE);
-
-    } else if (keymatch(arg, "noovershoot", 11)) {
+    }
+    else if (keymatch(arg, "noovershoot", 11))
+    {
       jpeg_c_set_bool_param(cinfo, JBOOLEAN_OVERSHOOT_DERINGING, FALSE);
-
-	} else if (keymatch(arg, "nojfif", 6)) {
+    }
+    else if (keymatch(arg, "nojfif", 6))
+    {
       cinfo->write_JFIF_header = 0;
-    } else {
+    }
+    else
+    {
       fprintf(stderr, "%s: unknown option '%s'\n", progname, arg);
-      usage();                  /* bogus switch */
+      usage(); /* bogus switch */
     }
   }
 
   /* Post-switch-scanning cleanup */
 
-  if (for_real) {
+  if (for_real)
+  {
 
     /* Set quantization tables for selected quality. */
     /* Some or all may be overridden if -qtables is present. */
-    if (qualityarg != NULL)     /* process -quality if it was present */
-      if (! set_quality_ratings(cinfo, qualityarg, force_baseline)) {
+    if (qualityarg != NULL) /* process -quality if it was present */
+      if (!set_quality_ratings(cinfo, qualityarg, force_baseline))
+      {
         fprintf(stderr, "%s: can't set quality ratings\n", progname);
         usage();
       }
 
-    if (qtablefile != NULL)     /* process -qtables if it was present */
-      if (! read_quant_tables(cinfo, qtablefile, force_baseline)) {
+    if (qtablefile != NULL) /* process -qtables if it was present */
+      if (!read_quant_tables(cinfo, qtablefile, force_baseline))
+      {
         fprintf(stderr, "%s: can't read qtable file\n", progname);
         usage();
       }
 
-    if (qslotsarg != NULL)      /* process -qslots if it was present */
+    if (qslotsarg != NULL) /* process -qslots if it was present */
       if (!set_quant_slots(cinfo, qslotsarg))
         usage();
 
     /* set_quality_ratings sets default subsampling, so the explicit
        subsampling must be set after it */
-    if (samplearg != NULL)      /* process -sample if it was present */
-      if (! set_sample_factors(cinfo, samplearg)) {
+    if (samplearg != NULL) /* process -sample if it was present */
+      if (!set_sample_factors(cinfo, samplearg))
+      {
         fprintf(stderr, "%s: can't set sample factors\n", progname);
         usage();
       }
 
 #ifdef C_PROGRESSIVE_SUPPORTED
-    if (simple_progressive)     /* process -progressive; -scans can override */
+    if (simple_progressive) /* process -progressive; -scans can override */
       jpeg_simple_progression(cinfo);
 #endif
 
 #ifdef C_MULTISCAN_FILES_SUPPORTED
-    if (scansarg != NULL)       /* process -scans if it was present */
+    if (scansarg != NULL) /* process -scans if it was present */
       if (!read_scan_script(cinfo, scansarg))
         usage();
 #endif
   }
 
-  return argn;                  /* return index of next arg (file name) */
+  return argn; /* return index of next arg (file name) */
 }
-
 
 METHODDEF(void)
 my_emit_message(j_common_ptr cinfo, int msg_level)
 {
-  if (msg_level < 0) {
+  if (msg_level < 0)
+  {
     /* Treat warning as fatal */
     cinfo->err->error_exit(cinfo);
-  } else {
+  }
+  else
+  {
     if (cinfo->err->trace_level >= msg_level)
       cinfo->err->output_message(cinfo);
   }
 }
 
-
 /*
  * The main program.
  */
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
   struct jpeg_compress_struct cinfo;
 #ifdef CJPEG_FUZZER
@@ -735,7 +801,7 @@ main(int argc, char **argv)
 
   progname = argv[0];
   if (progname == NULL || progname[0] == 0)
-    progname = "cjpeg";         /* in case C library doesn't provide it */
+    progname = "cjpeg"; /* in case C library doesn't provide it */
 
   /* Initialize the JPEG compression object with default error handling. */
   cinfo.err = jpeg_std_error(&jerr);
@@ -766,17 +832,23 @@ main(int argc, char **argv)
     jerr.emit_message = my_emit_message;
 
 #ifdef TWO_FILE_COMMANDLINE
-  if (!memdst) {
+  if (!memdst)
+  {
     /* Must have either -outfile switch or explicit output file name */
-    if (outfilename == NULL) {
-      if (file_index != argc - 2) {
+    if (outfilename == NULL)
+    {
+      if (file_index != argc - 2)
+      {
         fprintf(stderr, "%s: must name one input and one output file\n",
                 progname);
         usage();
       }
       outfilename = argv[file_index + 1];
-    } else {
-      if (file_index != argc - 1) {
+    }
+    else
+    {
+      if (file_index != argc - 1)
+      {
         fprintf(stderr, "%s: must name one input and one output file\n",
                 progname);
         usage();
@@ -785,52 +857,66 @@ main(int argc, char **argv)
   }
 #else
   /* Unix style: expect zero or one file name */
-  if (file_index < argc - 1) {
+  if (file_index < argc - 1)
+  {
     fprintf(stderr, "%s: only one input file\n", progname);
     usage();
   }
 #endif /* TWO_FILE_COMMANDLINE */
 
   /* Open the input file. */
-  if (file_index < argc) {
-    if ((input_file = fopen(argv[file_index], READ_BINARY)) == NULL) {
+  if (file_index < argc)
+  {
+    if ((input_file = fopen(argv[file_index], READ_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, argv[file_index]);
       exit(EXIT_FAILURE);
     }
-  } else {
+  }
+  else
+  {
     /* default input file is stdin */
     input_file = read_stdin();
   }
 
   /* Open the output file. */
-  if (outfilename != NULL) {
-    if ((output_file = fopen(outfilename, WRITE_BINARY)) == NULL) {
+  if (outfilename != NULL)
+  {
+    if ((output_file = fopen(outfilename, WRITE_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, outfilename);
       exit(EXIT_FAILURE);
     }
-  } else if (!memdst) {
+  }
+  else if (!memdst)
+  {
     /* default output file is stdout */
     output_file = write_stdout();
   }
 
-  if (icc_filename != NULL) {
-    if ((icc_file = fopen(icc_filename, READ_BINARY)) == NULL) {
+  if (icc_filename != NULL)
+  {
+    if ((icc_file = fopen(icc_filename, READ_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, icc_filename);
       exit(EXIT_FAILURE);
     }
     if (fseek(icc_file, 0, SEEK_END) < 0 ||
         (icc_len = ftell(icc_file)) < 1 ||
-        fseek(icc_file, 0, SEEK_SET) < 0) {
+        fseek(icc_file, 0, SEEK_SET) < 0)
+    {
       fprintf(stderr, "%s: can't determine size of %s\n", progname,
               icc_filename);
       exit(EXIT_FAILURE);
     }
-    if ((icc_profile = (JOCTET *)malloc(icc_len)) == NULL) {
+    if ((icc_profile = (JOCTET *)malloc(icc_len)) == NULL)
+    {
       fprintf(stderr, "%s: can't allocate memory for ICC profile\n", progname);
       fclose(icc_file);
       exit(EXIT_FAILURE);
     }
-    if (fread(icc_profile, icc_len, 1, icc_file) < 1) {
+    if (fread(icc_profile, icc_len, 1, icc_file) < 1)
+    {
       fprintf(stderr, "%s: can't read ICC profile from %s\n", progname,
               icc_filename);
       free(icc_profile);
@@ -847,7 +933,8 @@ main(int argc, char **argv)
     HANDLE_ERROR()
 #endif
 
-  if (report) {
+  if (report)
+  {
     start_progress_monitor((j_common_ptr)&cinfo, &progress);
     progress.report = report;
   }
@@ -860,13 +947,13 @@ main(int argc, char **argv)
 #endif
 
   /* Read the input file header to obtain file size & colorspace. */
-  (*src_mgr->start_input) (&cinfo, src_mgr);
+  (*src_mgr->start_input)(&cinfo, src_mgr);
 
   /* Now that we know input colorspace, fix colorspace-dependent defaults */
 #if JPEG_RAW_READER
   if (!is_jpeg)
 #endif
-  jpeg_default_colorspace(&cinfo);
+    jpeg_default_colorspace(&cinfo);
 
   /* Adjust default compression parameters by re-parsing the options */
   file_index = parse_switches(&cinfo, argc, argv, 0, TRUE);
@@ -884,19 +971,39 @@ main(int argc, char **argv)
     HANDLE_ERROR()
 #endif
 
+  if ((fptr = fopen("/home/nora/Projects/SecLab/jpeg/mozjpeg/src/AC-trellis.txt", "a")) == NULL)
+  {
+    fprintf(stderr, "Could not open AC-trellis.txt.\n");
+  }
+
+  if ((rptr = fopen("/home/nora/Projects/SecLab/jpeg/mozjpeg/src/AC-trellis-report.txt", "a")) == NULL)
+  {
+    fprintf(stderr, "Could not open AC-trellis-report.txt.\n");
+  }
+  if ((huffrecordptr = fopen("/home/nora/Projects/SecLab/jpeg/mozjpeg/src/Huffman_record.txt", "a")) == NULL)
+  {
+    fprintf(stderr, "Could not open Huffman_record.txt.\n");
+  }
+  if ((runrecordptr = fopen("/home/nora/Projects/SecLab/jpeg/mozjpeg/src/Run_record.txt", "a")) == NULL)
+  {
+    fprintf(stderr, "Could not open Run record.txt.\n");
+  }
+
   /* Start compressor */
   jpeg_start_compress(&cinfo, TRUE);
 
   /* Copy metadata */
-  if (copy_markers) {
+  if (copy_markers)
+  {
     jpeg_saved_marker_ptr marker;
-    
+
     /* In the current implementation, we don't actually need to examine the
      * option flag here; we just copy everything that got saved.
      * But to avoid confusion, we do not output JFIF and Adobe APP14 markers
      * if the encoder library already wrote one.
      */
-    for (marker = src_mgr->marker_list; marker != NULL; marker = marker->next) {
+    for (marker = src_mgr->marker_list; marker != NULL; marker = marker->next)
+    {
       if (cinfo.write_JFIF_header &&
           marker->marker == JPEG_APP0 &&
           marker->data_length >= 5 &&
@@ -905,16 +1012,16 @@ main(int argc, char **argv)
           GETJOCTET(marker->data[2]) == 0x49 &&
           GETJOCTET(marker->data[3]) == 0x46 &&
           GETJOCTET(marker->data[4]) == 0)
-        continue;                       /* reject duplicate JFIF */
+        continue; /* reject duplicate JFIF */
       if (cinfo.write_Adobe_marker &&
-          marker->marker == JPEG_APP0+14 &&
+          marker->marker == JPEG_APP0 + 14 &&
           marker->data_length >= 5 &&
           GETJOCTET(marker->data[0]) == 0x41 &&
           GETJOCTET(marker->data[1]) == 0x64 &&
           GETJOCTET(marker->data[2]) == 0x6F &&
           GETJOCTET(marker->data[3]) == 0x62 &&
           GETJOCTET(marker->data[4]) == 0x65)
-        continue;                       /* reject duplicate Adobe */
+        continue; /* reject duplicate Adobe */
       jpeg_write_marker(&cinfo, marker->marker, marker->data,
                         marker->data_length);
     }
@@ -923,20 +1030,26 @@ main(int argc, char **argv)
     jpeg_write_icc_profile(&cinfo, icc_profile, (unsigned int)icc_len);
 
   /* Process data */
-  while (cinfo.next_scanline < cinfo.image_height) {
-    num_scanlines = (*src_mgr->get_pixel_rows) (&cinfo, src_mgr);
+  while (cinfo.next_scanline < cinfo.image_height)
+  {
+    num_scanlines = (*src_mgr->get_pixel_rows)(&cinfo, src_mgr);
 #if JPEG_RAW_READER
     if (is_jpeg)
-      (void) jpeg_write_raw_data(&cinfo, src_mgr->plane_pointer, num_scanlines);
+      (void)jpeg_write_raw_data(&cinfo, src_mgr->plane_pointer, num_scanlines);
     else
 #endif
-    (void) jpeg_write_scanlines(&cinfo, src_mgr->buffer, num_scanlines);
+      (void)jpeg_write_scanlines(&cinfo, src_mgr->buffer, num_scanlines);
   }
 
   /* Finish compression and release memory */
-  (*src_mgr->finish_input) (&cinfo, src_mgr);
+  (*src_mgr->finish_input)(&cinfo, src_mgr);
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
+
+  fclose(rptr);
+  fclose(fptr);
+  fclose(huffrecordptr);
+  fclose(runrecordptr);
 
   /* Close files, if we opened them */
   if (input_file != stdin)
@@ -947,7 +1060,8 @@ main(int argc, char **argv)
   if (report)
     end_progress_monitor((j_common_ptr)&cinfo);
 
-  if (memdst) {
+  if (memdst)
+  {
 #ifndef CJPEG_FUZZER
     fprintf(stderr, "Compressed size:  %lu bytes\n", outsize);
 #endif

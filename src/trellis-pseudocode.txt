@@ -1,0 +1,95 @@
+
+The funciton `quantize_trellis()` is called for every 8x8 pixel block of an image.
+
+The followingly described programm does Trellis coded quantization of one 8x8 pixel block.
+In an 512x512 baseline color image with no subsampling, this program is executed 12.288 times (512*512/8/8*3)
+
+
+function quantize_trellis_AC():
+
+
+    for every frequency band (coefficient) (i) included in one scan:
+        
+        accumulated_zero_distance = coef*coef * lambda*lambda_tbl[i] plus accumulated_zero_distance of previeous scan. 
+
+        calculate quantized value (rounded to the nearest integer)
+        
+        if the quantized value is 0:
+            result coefficient = 0
+        
+        if the quantized value exceeds MAX_COEF_BITS (The legal range of a DCT coefficient is -1024 .. +1023 for 8-bit data): 
+            result coefficient = MAX_COEF_BITS (1023)
+
+
+        get the number of candidates (maximal bit size needed to represent the qval) for quantized value (max. = 16) (jpeg_nbits_table[qval];)
+
+        for every candidate k (0 being the first, len(candidates) being the last):
+            prepare an Int Mask having k+1 ones (e.g. k=1 => 00000011 "2 bits" )
+            
+            store Mask together with bits
+            - calculate delta:  the distance of the candidate's dequantized value (rounded to the nearest integer) and unquantized value
+            - calculate the rate (bits) of the candidate (candidate_bits)
+            - calculate the distortion (square distance multiplied by lambda * lambda_tbl[i])
+
+        set the accumulated_cost for this coefficient i to max.
+        
+
+        ** COMPARISON OF CANDIDATES TO FIND LOWEST COSTS **
+        for each preceding coefficient j (i-1): (i starts at 1 (ACs))  which's result coefficient is not 0:
+            get number of zero_runs
+            exit loop, in case zero_runs exceeds 15 and EOB has been reached (actbl->ehufsi[0xf0] == 0)
+            
+            if zero_run exceeds 15 ((zero_run >> 4) == 1), run_bits = hufmansize for value 15*16 (240, called ZRL)
+            if zero_run exceeds 15, reset to 0
+
+            for every candidate k (like before) (0 being the first, len(candidates) being the last):
+                get the coef_bits of current candidate (including zero_run) (lookup in ehufsi at [16*zero_run+candidate bits of k])
+                    (If no code has been allocated for a symbol S, ehufsi[S] contains 0)
+
+                if coef_bits of current candidate k is not 0:
+                    get the rate: (coef_bits + candidate_bits + run_bits)
+                    
+                    
+                    get the costs of current candidate : 
+                        + cost of current kandidate (rate + candidate distortion)  
+                        + acc. zero distance of the preceding coefficient i - 1
+                        - acc. zero distance of the preceding coefficient j (i which's result coeff is not 0)
+                        + accumulated_cost of the preceding coefficient j (i which's result coeff is not 0)
+                    
+            set the result coefficient coef_blocks of the candidate, having the lowest costs (using the sign of the unquantized coefficient)
+
+
+    TODO: Not sure, what happens here. MAYBE, we calculate the costs minus the costs for the ????
+
+    TODO: set the best costs to be the cost of coding to a nonzero block (?) (accumulated_zero_distance of the last coefficient + ehufsi[0])
+
+    for each frequency band i in one scan (Ss to Se), which's result coeff is not 0:
+        get costs without end of block:
+            + accumulated costs of current coefficient i
+            - accumulated_zero_dist of the current coefficient i (except for the last one)
+
+        TODO: for each frequency band i except the last one, add ehufsi[0] to the costs 
+
+        get the  ..... TODO
+                 
+    
+    zero out coefficients that are part of runs. 
+
+    done 
+
+
+
+
+
+
+
+----------------------------------------------------- Record
+Index   value   quantized       zero-runs   RESULT  
+1       17      0                           0
+2       551     11              1                
+
+
+
+
+
+

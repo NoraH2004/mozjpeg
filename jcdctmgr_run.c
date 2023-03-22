@@ -25,6 +25,8 @@
 #include "jchuff.h"
 #include <assert.h>
 #include <math.h>
+#include <time.h>
+#include <unistd.h>
 
 FILE *fptr;
 FILE *rptr;
@@ -411,15 +413,12 @@ catmull_rom(const DCTELEM value1, const DCTELEM value2, const DCTELEM value3, co
 }
 
 /** Prevents visible ringing artifacts near hard edges on white backgrounds.
-
   1. JPEG can encode samples with higher values than it's possible to display (higher than 255 in RGB),
      and the decoder will always clamp values to 0-255. To encode 255 you can use any value >= 255,
      and distortions of the out-of-range values won't be visible as long as they decode to anything >= 255.
-
   2. From DCT perspective pixels in a block are a waveform. Hard edges form square waves (bad).
      Edges with white are similar to waveform clipping, and anti-clipping algorithms can turn square waves
      into softer ones that compress better.
-
  */
 METHODDEF(void)
 preprocess_deringing(DCTELEM *data, const JQUANT_TBL *quantization_table)
@@ -1044,7 +1043,9 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
 {
   int i, j, k, l;
   float accumulated_zero_dist[DCTSIZE2];
+  float accumulated_zero_dist_wotrellis[DCTSIZE2]; // nh
   float accumulated_cost[DCTSIZE2];
+  float accumulated_cost_wotrellis[DCTSIZE2]; // nh
   int run_start[DCTSIZE2];
   int bi;
   float best_cost;
@@ -1054,6 +1055,7 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
   float lambda;
   float lambda_dc;
   const float *lambda_tbl = (cinfo->master->use_lambda_weight_tbl) ? jpeg_lambda_weights_csf_luma : jpeg_lambda_weights_flat;
+
   int Ss, Se;
   float *accumulated_zero_block_cost = NULL;
   float *accumulated_block_cost = NULL;
@@ -1072,6 +1074,13 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
   int mode = 1;
   float lambda_table[DCTSIZE2];
   const int dc_trellis_candidates = get_num_dc_trellis_candidates(qtbl->quantval[0]);
+
+  // src[1][jpeg_natural_order[1]] = -574;
+  // src[1][jpeg_natural_order[2]] = -635;
+  // src[1][jpeg_natural_order[3]] = -107;
+  // src[1][jpeg_natural_order[4]] = 540;
+
+  int lookat = 57432;
 
   Ss = cinfo->Ss;
   Se = cinfo->Se;
@@ -1130,6 +1139,18 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
   }
   else
     lambda_base = 1.0 / norm;
+
+  int initial_coefficients[64];
+  int unquantized_coefficients[64];
+  float initial_costs[64];
+  int costs_before_rle = 0;
+  int final_coefficients[64];
+  float final_costs = 0;
+  float nacccost = 0;
+
+  int y[64];
+  int yast[64];
+  int yastast[64];
 
   for (bi = 0; bi < num_blocks; bi++)
   {
@@ -1238,6 +1259,11 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
       }
     }
 
+    float distortion_before_trellis[] = {};
+    float distortion_after_trellis[] = {};
+    int qvals[] = {};
+    int qtrel[] = {};
+
     /* Do AC coefficients */
     for (i = Ss; i <= Se; i++)
     {
@@ -1245,21 +1271,37 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
 
       int sign = src[bi][z] >> 31;
       int x = abs(src[bi][z]);
+      y[i] = (sign == 0) ? x : x * sign;
       int q = 8 * qtbl->quantval[z];
       int candidate[16];
       int candidate_bits[16];
+      int candidate_bits_wotrellis[16];
       float candidate_dist[16];
+      float candidate_dist_wotrellis[16];
       int num_candidates;
       int qval;
 
       accumulated_zero_dist[i] = x * x * lambda * lambda_tbl[z] + accumulated_zero_dist[i - 1];
 
-      qval = (x + q / 2) / q; /* quantized value (round nearest) */
+      accumulated_zero_dist_wotrellis[i] = x * x * lambda * lambda_tbl[z] + accumulated_zero_dist[i - 1]; // nh
+
+      qval = (x + q / 2) / q;
+
+      if (x == lookat && bi == 1)
+      {
+        fprintf(stderr, "qval= %d, q= %d\n", qval, q);
+      }
+      yast[i] = (sign == 0) ? qval : qval * sign;
+      qvals[i] = (sign == 0) ? qval : qval * sign;                /* quantized value (round nearest) */
+      initial_coefficients[i] = (sign == 0) ? qval : qval * sign; // nh
 
       if (qval == 0)
       {
         coef_blocks[bi][z] = 0;
-        accumulated_cost[i] = 1e38; /* Shouldn't be needed */
+        yastast[i] = 0;
+        qtrel[i] = 0;
+        accumulated_cost[i] = 1e38;                                     /* Shouldn't be needed */
+        accumulated_cost_wotrellis[i] = 1e38; /* Shouldn't be needed */ // nh
         continue;
       }
 
@@ -1267,6 +1309,9 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
         qval = (1 << MAX_COEF_BITS) - 1;
 
       num_candidates = jpeg_nbits_table[qval];
+      candidate_bits_wotrellis[i] = num_candidates; // nh
+      candidate_dist_wotrellis[i] = qval * q - x;   // nh
+
       for (k = 0; k < num_candidates; k++)
       {
         int delta;
@@ -1274,13 +1319,52 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
         delta = candidate[k] * q - x;
         candidate_bits[k] = k + 1;
         candidate_dist[k] = delta * delta * lambda * lambda_tbl[z];
+        if (x == lookat && bi == 1)
+        {
+          fprintf(stderr, "k=%d, cand = %d, candidate_dist[k]= %.5f, delta=%d, lambda=%.5f, lambda_tbl[z]=%.5f\n", k, candidate[k], candidate_dist[k], delta, lambda, lambda_tbl[z]);
+        }
       }
 
+      accumulated_cost_wotrellis[i] = 1e38; /* Shouldn't be needed */ // nh
       accumulated_cost[i] = 1e38;
+      int a = i; // nh
+
+      // NH: The following for loop is to get the costs before trellis:
+      for (int b = Ss - 1; j < i; j++)
+      {
+        int nzz = jpeg_natural_order[b];
+        if (b != Ss - 1 && coef_blocks[bi][nzz] == 0)
+          continue;
+
+        int nzero_run = a - 1 - b;
+        if ((nzero_run >> 4) && actbl->ehufsi[0xf0] == 0)
+          continue;
+
+        int nrun_bits = (nzero_run >> 4) * actbl->ehufsi[0xf0];
+        nzero_run &= 15;
+        int ncandidate_bits = candidate_bits_wotrellis[0];
+        int ncoef_bits = actbl->ehufsi[16 * nzero_run + candidate_bits[a]];
+        if (ncoef_bits == 0)
+          continue;
+
+        int nrate = ncoef_bits + candidate_bits_wotrellis[a] + nrun_bits;
+        int ncost = nrate + candidate_dist_wotrellis[a];
+        ncost += accumulated_zero_dist_wotrellis[a - 1] - accumulated_zero_dist_wotrellis[b] + accumulated_cost_wotrellis[b];
+        accumulated_cost_wotrellis[a] = ncost;
+        initial_costs[i] = ncost;
+      }
+
+      // NH: Loop end
+
+      if (x == lookat && bi == 1)
+      {
+        fprintf(stderr, "run: %d %d %d %d %d\n", coef_blocks[bi][z], coef_blocks[bi][z - 1], coef_blocks[bi][z - 2], coef_blocks[bi][z - 3], coef_blocks[bi][z - 4]);
+      }
 
       for (j = Ss - 1; j < i; j++)
       {
         int zz = jpeg_natural_order[j];
+
         if (j != Ss - 1 && coef_blocks[bi][zz] == 0)
           continue;
 
@@ -1293,17 +1377,28 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
 
         for (k = 0; k < num_candidates; k++)
         {
+
           int coef_bits = actbl->ehufsi[16 * zero_run + candidate_bits[k]];
           if (coef_bits == 0)
             continue;
 
           rate = coef_bits + candidate_bits[k] + run_bits;
           cost = rate + candidate_dist[k];
+          float cost_k = cost;
           cost += accumulated_zero_dist[i - 1] - accumulated_zero_dist[j] + accumulated_cost[j];
+          if (x == lookat && bi == 1)
+          {
+            fprintf(stderr, "c= %d, j=%d, rate=%d (coefbits(%d)(zero-run(%d)) + candidatebits(%d) + runbits(%d)\n", candidate[k], j, rate, coef_bits, zero_run, candidate_bits[k], run_bits);
+            fprintf(stderr, "c= %d, j=%d, candidatedist[k]=%.5f, accumulated_zero_dist[i - 1]=%.5f - accumulated_zero_dist[j]=%.5f\n", candidate[k], j, candidate_dist[k], accumulated_zero_dist[i - 1], accumulated_zero_dist[j]);
+            fprintf(stderr, "c= %d, j=%d, candidate_cost=%.5f, accumulated_cost[j]=%.5f, total cost=%.5f\n\n", candidate[k], j, cost_k, accumulated_cost[j], cost);
+            sleep(3);
+          }
 
           if (cost < accumulated_cost[i])
           {
             coef_blocks[bi][z] = (candidate[k] ^ sign) - sign;
+            yastast[i] = coef_blocks[bi][z];
+            qtrel[i] = (candidate[k] ^ sign) - sign;
             accumulated_cost[i] = cost;
             run_start[i] = j;
           }
@@ -1315,6 +1410,16 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
     best_cost = accumulated_zero_dist[Se] + actbl->ehufsi[0];
     cost_all_zeros = accumulated_zero_dist[Se];
     best_cost_skip = cost_all_zeros;
+
+    // nh
+
+    // // coefficients before run length optimization
+    // for (int cc = 1; cc < 63; cc++)
+    // {
+    //   fprintf(runrecordptr, "%d ", coef_blocks[bi][jpeg_natural_order[cc]]);
+    // }
+
+    // fprintf(runrecordptr, "Costs before RLO: %f \n", best_cost);
 
     for (i = Ss; i <= Se; i++)
     {
@@ -1346,11 +1451,160 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
       {
         int z = jpeg_natural_order[i];
         coef_blocks[bi][z] = 0;
+        yastast[i] = 0;
         i--;
       }
       last_coeff_idx = run_start[i];
       i--;
     }
+    final_costs = best_cost;
+
+    for (i = Ss + 1; i <= Se; i++)
+    {
+      int z = jpeg_natural_order[i];
+      int winner_coef = coef_blocks[bi][z];
+      distortion_after_trellis[i] = (winner_coef * (8 * qtbl->quantval[z]) - abs(src[bi][z])) * (winner_coef * (8 * qtbl->quantval[z]) - abs(src[bi][z])) * lambda * lambda_tbl[z];
+    }
+
+    // fprintf(rptr, "Block-index: %.2d -> Distortion before: %.2f Distortion after: %.2f \n", bi, sum_before, sum_after);
+
+    // final coefficients
+
+    // fprintf(stderr, "ZRL: %i, EOB: %i", actbl->ehufsi[0xf0], actbl->ehufsi[0]);
+    // fprintf(stderr, "ZRL: %i, EOB: %i", actbl->ehufco[0xf0], actbl->ehufco[0]);
+    fprintf(runrecordptr, "Block-index: %.2d ", bi);
+    // initial coefficients
+
+    float initial_distortion = 0;
+    float final_distortion = 0;
+    for (int cc = 1; cc < 64; cc++)
+    {
+      int zz = jpeg_natural_order[cc];
+      initial_distortion += (abs(initial_coefficients[cc]) * (8 * qtbl->quantval[zz]) - abs(src[bi][zz])) * (abs(initial_coefficients[cc]) * (8 * qtbl->quantval[zz]) - abs(src[bi][zz])) * lambda * lambda_tbl[zz];
+      final_distortion += (abs(coef_blocks[bi][zz]) * (8 * qtbl->quantval[zz]) - abs(src[bi][zz])) * (abs(initial_coefficients[cc]) * (8 * qtbl->quantval[zz]) - abs(src[bi][zz])) * lambda * lambda_tbl[zz];
+
+      fprintf(runrecordptr, "%d ", initial_coefficients[cc]);
+    }
+    fprintf(runrecordptr, "idist: %.2f \n", initial_distortion);
+    // fprintf(runrecordptr, "Block-index: %.2d ", bi);
+
+    fprintf(runrecordptr, "Block-index: %.2d ", bi);
+    float final_delta = 0;
+    for (int cc = 1; cc < 64; cc++)
+    {
+      int z = jpeg_natural_order[cc];
+      int x = abs(src[bi][z]);
+      int q = 8 * qtbl->quantval[z];
+
+      final_delta = final_delta + ((abs(coef_blocks[bi][z]) * q - x) * (abs(coef_blocks[bi][z]) * q - x) * lambda * lambda_tbl[z]);
+
+      fprintf(runrecordptr, "%d ", coef_blocks[bi][z]);
+    }
+    // fprintf(runrecordptr, " Final costs: %f, distortion: %.2f\n", final_costs, sum_after);
+    time_t ltime;       /* calendar time */
+    ltime = time(NULL); /* get current cal time */
+    // fprintf(stderr, "Finishing quantiuzation %s", asctime(localtime(&ltime)));
+
+    float dast = 0;
+    float dastast = 0;
+
+    for (int i = 1; i < 64; i++)
+    {
+      int z = jpeg_natural_order[i];
+      int q = 8 * qtbl->quantval[z];
+
+      // calculate initial distortion
+      float distast_i = (abs(yast[i]) * q - abs(y[i])) * (abs(yast[i]) * q - abs(y[i])) * lambda * lambda_tbl[z];
+      dast += distast_i;
+
+      // calculate final distortion
+      float distastast_i = (abs(yastast[i]) * q - abs(y[i])) * (abs(yastast[i]) * q - abs(y[i])) * lambda * lambda_tbl[z];
+      dastast += distastast_i;
+    }
+    // Print unqunatized  y
+    fprintf(rptr, "Block-index: %.2d ", bi);
+    for (int i = 1; i < 64; i++)
+    {
+      fprintf(rptr, "%d ", y[i]);
+    }
+
+    // Print qunatized init yast + astdistortion
+    fprintf(rptr, "\nBlock-index: %.2d ", bi);
+    for (int i = 1; i < 64; i++)
+    {
+      fprintf(rptr, "%d ", yast[i]);
+    }
+    fprintf(rptr, "idist: %.2f", dast);
+
+    // Print qunatized final yastast + astastdistortion
+    fprintf(rptr, "\nBlock-index: %.2d ", bi);
+    for (int i = 1; i < 64; i++)
+    {
+      fprintf(rptr, "%d ", yastast[i]);
+    }
+    fprintf(rptr, "fdist: %.2f \n", dastast);
+
+    // for (int i = 1; i < 64; i++)
+    // {
+    //   if (y[1] == -574)
+    //   {
+
+    //     fprintf(stderr, "\n  y:");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       fprintf(stderr, "%d ", y[i]);
+    //     }
+    //     fprintf(stderr, "\n y':");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       fprintf(stderr, "%d ", yast[i]);
+    //     }
+    //     fprintf(stderr, "\n y'':");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       fprintf(stderr, "%d ", yastast[i]);
+    //     }
+    //     fprintf(stderr, "\n q:");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       int z = jpeg_natural_order[i];
+    //       int q = 8 * qtbl->quantval[z];
+    //       fprintf(stderr, "%d ", q);
+    //     }
+
+    //     fprintf(stderr, "\n lt:");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       int z = jpeg_natural_order[i];
+    //       fprintf(stderr, "%.2f ", lambda_tbl[z]);
+    //     }
+    //     fprintf(stderr, "\n dist': ");
+    //     // fprintf(stderr, "(abs(yast[i]) * q - abs(y[i])) * (abs(yast[i]) * q - abs(y[i])) * lambda * lambda_tbl[z];");
+
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       int z = jpeg_natural_order[i];
+    //       int q = 8 * qtbl->quantval[z];
+
+    //       // calculate initial distortion
+    //       float distast_i = (abs(yast[i]) * q - abs(y[i])) * (abs(yast[i]) * q - abs(y[i])) * lambda * lambda_tbl[z];
+    //       // fprintf(stderr, "(abs(%d) * %d - abs(%d)) * (%d) * %d - abs(%d) * %.5f * %.5f;", abs(yast[i]), q, abs(y[i]), abs(yast[i]), q, abs(y[i]), lambda, lambda_tbl[z]);
+
+    //       fprintf(stderr, "%.2f \n", distast_i);
+    //     }
+    //     fprintf(stderr, "\n dist'':");
+    //     for (int i = 1; i < 10; i++)
+    //     {
+    //       int z = jpeg_natural_order[i];
+    //       int q = 8 * qtbl->quantval[z];
+
+    //       // calculate final distortion
+    //       float distastast_i = (abs(yastast[i]) * q - abs(y[i])) * (abs(yastast[i]) * q - abs(y[i])) * lambda * lambda_tbl[z];
+    //       fprintf(stderr, "%.2f ", distastast_i);
+    //     }
+    //     fprintf(stderr, "\n lambda: %.2f \n\n", lambda);
+    //   }
+    // }
 
     if (cinfo->master->trellis_eob_opt)
     {

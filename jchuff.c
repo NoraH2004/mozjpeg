@@ -27,6 +27,7 @@
 #include "jinclude.h"
 #include "jpeglib.h"
 #include "jsimd.h"
+#include "jconfigint.h"
 #include <limits.h>
 
 /*
@@ -53,17 +54,16 @@
 
 #ifdef USE_CLZ_INTRINSIC
 #if defined(_MSC_VER) && !defined(__clang__)
-#define JPEG_NBITS_NONZERO(x)  (32 - _CountLeadingZeros(x))
+#define JPEG_NBITS_NONZERO(x) (32 - _CountLeadingZeros(x))
 #else
-#define JPEG_NBITS_NONZERO(x)  (32 - __builtin_clz(x))
+#define JPEG_NBITS_NONZERO(x) (32 - __builtin_clz(x))
 #endif
-#define JPEG_NBITS(x)          (x ? JPEG_NBITS_NONZERO(x) : 0)
+#define JPEG_NBITS(x) (x ? JPEG_NBITS_NONZERO(x) : 0)
 #else
 #include "jpeg_nbits_table.h"
-#define JPEG_NBITS(x)          (jpeg_nbits_table[x])
-#define JPEG_NBITS_NONZERO(x)  JPEG_NBITS(x)
+#define JPEG_NBITS(x) (jpeg_nbits_table[x])
+#define JPEG_NBITS_NONZERO(x) JPEG_NBITS(x)
 #endif
-
 
 /* Expanded entropy encoder object for Huffman encoding.
  *
@@ -90,38 +90,41 @@ typedef bit_buf_type simd_bit_buf_type;
 
 #if (defined(SIZEOF_SIZE_T) && SIZEOF_SIZE_T == 8) || defined(_WIN64) || \
     (defined(__x86_64__) && defined(__ILP32__))
-#define BIT_BUF_SIZE  64
+#define BIT_BUF_SIZE 64
 #elif (defined(SIZEOF_SIZE_T) && SIZEOF_SIZE_T == 4) || defined(_WIN32)
-#define BIT_BUF_SIZE  32
+#define BIT_BUF_SIZE 32
 #else
 #error Cannot determine word size
 #endif
-#define SIMD_BIT_BUF_SIZE  (sizeof(simd_bit_buf_type) * 8)
+#define SIMD_BIT_BUF_SIZE (sizeof(simd_bit_buf_type) * 8)
 
-typedef struct {
-  union {
+typedef struct
+{
+  union
+  {
     bit_buf_type c;
     simd_bit_buf_type simd;
-  } put_buffer;                         /* current bit accumulation buffer */
-  int free_bits;                        /* # of bits available in it */
-                                        /* (Neon GAS: # of bits now in it) */
-  int last_dc_val[MAX_COMPS_IN_SCAN];   /* last DC coef for each component */
+  } put_buffer;                       /* current bit accumulation buffer */
+  int free_bits;                      /* # of bits available in it */
+                                      /* (Neon GAS: # of bits now in it) */
+  int last_dc_val[MAX_COMPS_IN_SCAN]; /* last DC coef for each component */
 } savable_state;
 
-typedef struct {
+typedef struct
+{
   struct jpeg_entropy_encoder pub; /* public fields */
 
-  savable_state saved;          /* Bit buffer & DC state at start of MCU */
+  savable_state saved; /* Bit buffer & DC state at start of MCU */
 
   /* These fields are NOT loaded into local working state. */
-  unsigned int restarts_to_go;  /* MCUs left in this restart interval */
-  int next_restart_num;         /* next restart number to write (0-7) */
+  unsigned int restarts_to_go; /* MCUs left in this restart interval */
+  int next_restart_num;        /* next restart number to write (0-7) */
 
   /* Pointers to derived tables (these workspaces have image lifespan) */
   c_derived_tbl *dc_derived_tbls[NUM_HUFF_TBLS];
   c_derived_tbl *ac_derived_tbls[NUM_HUFF_TBLS];
 
-#ifdef ENTROPY_OPT_SUPPORTED    /* Statistics tables for optimization */
+#ifdef ENTROPY_OPT_SUPPORTED /* Statistics tables for optimization */
   long *dc_count_ptrs[NUM_HUFF_TBLS];
   long *ac_count_ptrs[NUM_HUFF_TBLS];
 #endif
@@ -135,24 +138,27 @@ typedef huff_entropy_encoder *huff_entropy_ptr;
  * This struct contains all the fields that are needed by subroutines.
  */
 
-typedef struct {
-  JOCTET *next_output_byte;     /* => next byte to write in buffer */
-  size_t free_in_buffer;        /* # of byte spaces remaining in buffer */
-  savable_state cur;            /* Current bit buffer & DC state */
-  j_compress_ptr cinfo;         /* dump_buffer needs access to this */
+typedef struct
+{
+  JOCTET *next_output_byte; /* => next byte to write in buffer */
+  size_t free_in_buffer;    /* # of byte spaces remaining in buffer */
+  savable_state cur;        /* Current bit buffer & DC state */
+  j_compress_ptr cinfo;     /* dump_buffer needs access to this */
   int simd;
 } working_state;
 
-
 /* Forward declarations */
-METHODDEF(boolean) encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data);
-METHODDEF(void) finish_pass_huff(j_compress_ptr cinfo);
+METHODDEF(boolean)
+encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data);
+METHODDEF(void)
+finish_pass_huff(j_compress_ptr cinfo);
 #ifdef ENTROPY_OPT_SUPPORTED
-METHODDEF(boolean) encode_mcu_gather(j_compress_ptr cinfo,
-                                     JBLOCKROW *MCU_data);
-METHODDEF(void) finish_pass_gather(j_compress_ptr cinfo);
+METHODDEF(boolean)
+encode_mcu_gather(j_compress_ptr cinfo,
+                  JBLOCKROW *MCU_data);
+METHODDEF(void)
+finish_pass_gather(j_compress_ptr cinfo);
 #endif
-
 
 /*
  * Initialize for a Huffman-compressed scan.
@@ -167,25 +173,30 @@ start_pass_huff(j_compress_ptr cinfo, boolean gather_statistics)
   int ci, dctbl, actbl;
   jpeg_component_info *compptr;
 
-  if (gather_statistics) {
+  if (gather_statistics)
+  {
 #ifdef ENTROPY_OPT_SUPPORTED
     entropy->pub.encode_mcu = encode_mcu_gather;
     entropy->pub.finish_pass = finish_pass_gather;
 #else
     ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif
-  } else {
+  }
+  else
+  {
     entropy->pub.encode_mcu = encode_mcu_huff;
     entropy->pub.finish_pass = finish_pass_huff;
   }
 
   entropy->simd = jsimd_can_huff_encode_one_block();
 
-  for (ci = 0; ci < cinfo->comps_in_scan; ci++) {
+  for (ci = 0; ci < cinfo->comps_in_scan; ci++)
+  {
     compptr = cinfo->cur_comp_info[ci];
     dctbl = compptr->dc_tbl_no;
     actbl = compptr->ac_tbl_no;
-    if (gather_statistics) {
+    if (gather_statistics)
+    {
 #ifdef ENTROPY_OPT_SUPPORTED
       /* Check for invalid table indexes */
       /* (make_c_derived_tbl does this in the other path) */
@@ -196,17 +207,17 @@ start_pass_huff(j_compress_ptr cinfo, boolean gather_statistics)
       /* Allocate and zero the statistics tables */
       /* Note that jpeg_gen_optimal_table expects 257 entries in each table! */
       if (entropy->dc_count_ptrs[dctbl] == NULL)
-        entropy->dc_count_ptrs[dctbl] = (long *)
-          (*cinfo->mem->alloc_small) ((j_common_ptr)cinfo, JPOOL_IMAGE,
-                                      257 * sizeof(long));
+        entropy->dc_count_ptrs[dctbl] = (long *)(*cinfo->mem->alloc_small)((j_common_ptr)cinfo, JPOOL_IMAGE,
+                                                                           257 * sizeof(long));
       memset(entropy->dc_count_ptrs[dctbl], 0, 257 * sizeof(long));
       if (entropy->ac_count_ptrs[actbl] == NULL)
-        entropy->ac_count_ptrs[actbl] = (long *)
-          (*cinfo->mem->alloc_small) ((j_common_ptr)cinfo, JPOOL_IMAGE,
-                                      257 * sizeof(long));
+        entropy->ac_count_ptrs[actbl] = (long *)(*cinfo->mem->alloc_small)((j_common_ptr)cinfo, JPOOL_IMAGE,
+                                                                           257 * sizeof(long));
       memset(entropy->ac_count_ptrs[actbl], 0, 257 * sizeof(long));
 #endif
-    } else {
+    }
+    else
+    {
       /* Compute derived values for Huffman tables */
       /* We may do this more than once for a table, but it's not expensive */
       jpeg_make_c_derived_tbl(cinfo, TRUE, dctbl,
@@ -219,14 +230,17 @@ start_pass_huff(j_compress_ptr cinfo, boolean gather_statistics)
   }
 
   /* Initialize bit buffer to empty */
-  if (entropy->simd) {
+  if (entropy->simd)
+  {
     entropy->saved.put_buffer.simd = 0;
 #if defined(__aarch64__) && !defined(NEON_INTRINSICS)
     entropy->saved.free_bits = 0;
 #else
     entropy->saved.free_bits = SIMD_BIT_BUF_SIZE;
 #endif
-  } else {
+  }
+  else
+  {
     entropy->saved.put_buffer.c = 0;
     entropy->saved.free_bits = BIT_BUF_SIZE;
   }
@@ -235,7 +249,6 @@ start_pass_huff(j_compress_ptr cinfo, boolean gather_statistics)
   entropy->restarts_to_go = cinfo->restart_interval;
   entropy->next_restart_num = 0;
 }
-
 
 /*
  * Compute the derived values for a Huffman table.
@@ -248,7 +261,8 @@ GLOBAL(void)
 jpeg_make_c_derived_tbl(j_compress_ptr cinfo, boolean isDC, int tblno,
                         c_derived_tbl **pdtbl)
 {
-  JHUFF_TBL *htbl;
+
+    JHUFF_TBL *htbl;
   c_derived_tbl *dtbl;
   int p, i, l, lastp, si, maxsymbol;
   char huffsize[257];
@@ -263,23 +277,24 @@ jpeg_make_c_derived_tbl(j_compress_ptr cinfo, boolean isDC, int tblno,
   if (tblno < 0 || tblno >= NUM_HUFF_TBLS)
     ERREXIT1(cinfo, JERR_NO_HUFF_TABLE, tblno);
   htbl =
-    isDC ? cinfo->dc_huff_tbl_ptrs[tblno] : cinfo->ac_huff_tbl_ptrs[tblno];
+      isDC ? cinfo->dc_huff_tbl_ptrs[tblno] : cinfo->ac_huff_tbl_ptrs[tblno];
   if (htbl == NULL)
     ERREXIT1(cinfo, JERR_NO_HUFF_TABLE, tblno);
 
   /* Allocate a workspace if we haven't already done so. */
   if (*pdtbl == NULL)
-    *pdtbl = (c_derived_tbl *)
-      (*cinfo->mem->alloc_small) ((j_common_ptr)cinfo, JPOOL_IMAGE,
-                                  sizeof(c_derived_tbl));
+    *pdtbl = (c_derived_tbl *)(*cinfo->mem->alloc_small)((j_common_ptr)cinfo, JPOOL_IMAGE,
+                                                         sizeof(c_derived_tbl));
   dtbl = *pdtbl;
 
   /* Figure C.1: make table of Huffman code length for each symbol */
+  // fprintf(stderr, "Deriving of Huffman table according to the standard C.1");
 
   p = 0;
-  for (l = 1; l <= 16; l++) {
+  for (l = 1; l <= 16; l++)
+  {
     i = (int)htbl->bits[l];
-    if (i < 0 || p + i > 256)   /* protect against table overrun */
+    if (i < 0 || p + i > 256) /* protect against table overrun */
       ERREXIT(cinfo, JERR_BAD_HUFF_TABLE);
     while (i--)
       huffsize[p++] = (char)l;
@@ -293,8 +308,10 @@ jpeg_make_c_derived_tbl(j_compress_ptr cinfo, boolean isDC, int tblno,
   code = 0;
   si = huffsize[0];
   p = 0;
-  while (huffsize[p]) {
-    while (((int)huffsize[p]) == si) {
+  while (huffsize[p])
+  {
+    while (((int)huffsize[p]) == si)
+    {
       huffcode[p++] = code;
       code++;
     }
@@ -324,7 +341,8 @@ jpeg_make_c_derived_tbl(j_compress_ptr cinfo, boolean isDC, int tblno,
    */
   maxsymbol = isDC ? 15 : 255;
 
-  for (p = 0; p < lastp; p++) {
+  for (p = 0; p < lastp; p++)
+  {
     i = htbl->huffval[p];
     if (i < 0 || i > maxsymbol || dtbl->ehufsi[i])
       ERREXIT(cinfo, JERR_BAD_HUFF_TABLE);
@@ -333,17 +351,18 @@ jpeg_make_c_derived_tbl(j_compress_ptr cinfo, boolean isDC, int tblno,
   }
 }
 
-
 /* Outputting bytes to the file */
 
 /* Emit a byte, taking 'action' if must suspend. */
-#define emit_byte(state, val, action) { \
-  *(state)->next_output_byte++ = (JOCTET)(val); \
-  if (--(state)->free_in_buffer == 0) \
-    if (!dump_buffer(state)) \
-      { action; } \
-}
-
+#define emit_byte(state, val, action)             \
+  {                                               \
+    *(state)->next_output_byte++ = (JOCTET)(val); \
+    if (--(state)->free_in_buffer == 0)           \
+      if (!dump_buffer(state))                    \
+      {                                           \
+        action;                                   \
+      }                                           \
+  }
 
 LOCAL(boolean)
 dump_buffer(working_state *state)
@@ -351,14 +370,13 @@ dump_buffer(working_state *state)
 {
   struct jpeg_destination_mgr *dest = state->cinfo->dest;
 
-  if (!(*dest->empty_output_buffer) (state->cinfo))
+  if (!(*dest->empty_output_buffer)(state->cinfo))
     return FALSE;
   /* After a successful buffer dump, must reset buffer pointers */
   state->next_output_byte = dest->next_output_byte;
   state->free_in_buffer = dest->free_in_buffer;
   return TRUE;
 }
-
 
 /* Outputting bits to the file */
 
@@ -367,11 +385,12 @@ dump_buffer(working_state *state)
  * byte is 0xFF.  Otherwise, the output buffer pointer is advanced by 1, and
  * the speculative 0 byte will be overwritten by the next byte.
  */
-#define EMIT_BYTE(b) { \
-  buffer[0] = (JOCTET)(b); \
-  buffer[1] = 0; \
-  buffer -= -2 + ((JOCTET)(b) < 0xFF); \
-}
+#define EMIT_BYTE(b)                     \
+  {                                      \
+    buffer[0] = (JOCTET)(b);             \
+    buffer[1] = 0;                       \
+    buffer -= -2 + ((JOCTET)(b) < 0xFF); \
+  }
 
 /* Output the entire bit buffer.  If there are no 0xFF bytes in it, then write
  * directly to the output buffer.  Otherwise, use the EMIT_BYTE() macro to
@@ -379,77 +398,87 @@ dump_buffer(working_state *state)
  */
 #if BIT_BUF_SIZE == 64
 
-#define FLUSH() { \
-  if (put_buffer & 0x8080808080808080 & ~(put_buffer + 0x0101010101010101)) { \
-    EMIT_BYTE(put_buffer >> 56) \
-    EMIT_BYTE(put_buffer >> 48) \
-    EMIT_BYTE(put_buffer >> 40) \
-    EMIT_BYTE(put_buffer >> 32) \
-    EMIT_BYTE(put_buffer >> 24) \
-    EMIT_BYTE(put_buffer >> 16) \
-    EMIT_BYTE(put_buffer >>  8) \
-    EMIT_BYTE(put_buffer      ) \
-  } else { \
-    buffer[0] = (JOCTET)(put_buffer >> 56); \
-    buffer[1] = (JOCTET)(put_buffer >> 48); \
-    buffer[2] = (JOCTET)(put_buffer >> 40); \
-    buffer[3] = (JOCTET)(put_buffer >> 32); \
-    buffer[4] = (JOCTET)(put_buffer >> 24); \
-    buffer[5] = (JOCTET)(put_buffer >> 16); \
-    buffer[6] = (JOCTET)(put_buffer >> 8); \
-    buffer[7] = (JOCTET)(put_buffer); \
-    buffer += 8; \
-  } \
-}
+#define FLUSH()                                                               \
+  {                                                                           \
+    if (put_buffer & 0x8080808080808080 & ~(put_buffer + 0x0101010101010101)) \
+    {                                                                         \
+      EMIT_BYTE(put_buffer >> 56)                                             \
+      EMIT_BYTE(put_buffer >> 48)                                             \
+      EMIT_BYTE(put_buffer >> 40)                                             \
+      EMIT_BYTE(put_buffer >> 32)                                             \
+      EMIT_BYTE(put_buffer >> 24)                                             \
+      EMIT_BYTE(put_buffer >> 16)                                             \
+      EMIT_BYTE(put_buffer >> 8)                                              \
+      EMIT_BYTE(put_buffer)                                                   \
+    }                                                                         \
+    else                                                                      \
+    {                                                                         \
+      buffer[0] = (JOCTET)(put_buffer >> 56);                                 \
+      buffer[1] = (JOCTET)(put_buffer >> 48);                                 \
+      buffer[2] = (JOCTET)(put_buffer >> 40);                                 \
+      buffer[3] = (JOCTET)(put_buffer >> 32);                                 \
+      buffer[4] = (JOCTET)(put_buffer >> 24);                                 \
+      buffer[5] = (JOCTET)(put_buffer >> 16);                                 \
+      buffer[6] = (JOCTET)(put_buffer >> 8);                                  \
+      buffer[7] = (JOCTET)(put_buffer);                                       \
+      buffer += 8;                                                            \
+    }                                                                         \
+  }
 
 #else
 
-#define FLUSH() { \
-  if (put_buffer & 0x80808080 & ~(put_buffer + 0x01010101)) { \
-    EMIT_BYTE(put_buffer >> 24) \
-    EMIT_BYTE(put_buffer >> 16) \
-    EMIT_BYTE(put_buffer >>  8) \
-    EMIT_BYTE(put_buffer      ) \
-  } else { \
-    buffer[0] = (JOCTET)(put_buffer >> 24); \
-    buffer[1] = (JOCTET)(put_buffer >> 16); \
-    buffer[2] = (JOCTET)(put_buffer >> 8); \
-    buffer[3] = (JOCTET)(put_buffer); \
-    buffer += 4; \
-  } \
-}
+#define FLUSH()                                               \
+  {                                                           \
+    if (put_buffer & 0x80808080 & ~(put_buffer + 0x01010101)) \
+    {                                                         \
+      EMIT_BYTE(put_buffer >> 24)                             \
+      EMIT_BYTE(put_buffer >> 16)                             \
+      EMIT_BYTE(put_buffer >> 8)                              \
+      EMIT_BYTE(put_buffer)                                   \
+    }                                                         \
+    else                                                      \
+    {                                                         \
+      buffer[0] = (JOCTET)(put_buffer >> 24);                 \
+      buffer[1] = (JOCTET)(put_buffer >> 16);                 \
+      buffer[2] = (JOCTET)(put_buffer >> 8);                  \
+      buffer[3] = (JOCTET)(put_buffer);                       \
+      buffer += 4;                                            \
+    }                                                         \
+  }
 
 #endif
 
 /* Fill the bit buffer to capacity with the leading bits from code, then output
  * the bit buffer and put the remaining bits from code into the bit buffer.
  */
-#define PUT_AND_FLUSH(code, size) { \
-  put_buffer = (put_buffer << (size + free_bits)) | (code >> -free_bits); \
-  FLUSH() \
-  free_bits += BIT_BUF_SIZE; \
-  put_buffer = code; \
-}
+#define PUT_AND_FLUSH(code, size)                                           \
+  {                                                                         \
+    put_buffer = (put_buffer << (size + free_bits)) | (code >> -free_bits); \
+    FLUSH()                                                                 \
+    free_bits += BIT_BUF_SIZE;                                              \
+    put_buffer = code;                                                      \
+  }
 
 /* Insert code into the bit buffer and output the bit buffer if needed.
  * NOTE: We can't flush with free_bits == 0, since the left shift in
  * PUT_AND_FLUSH() would have undefined behavior.
  */
-#define PUT_BITS(code, size) { \
-  free_bits -= size; \
-  if (free_bits < 0) \
-    PUT_AND_FLUSH(code, size) \
-  else \
-    put_buffer = (put_buffer << size) | code; \
-}
+#define PUT_BITS(code, size)                    \
+  {                                             \
+    free_bits -= size;                          \
+    if (free_bits < 0)                          \
+      PUT_AND_FLUSH(code, size)                 \
+    else                                        \
+      put_buffer = (put_buffer << size) | code; \
+  }
 
-#define PUT_CODE(code, size) { \
-  temp &= (((JLONG)1) << nbits) - 1; \
-  temp |= code << nbits; \
-  nbits += size; \
-  PUT_BITS(temp, nbits) \
-}
-
+#define PUT_CODE(code, size)           \
+  {                                    \
+    temp &= (((JLONG)1) << nbits) - 1; \
+    temp |= code << nbits;             \
+    nbits += size;                     \
+    PUT_BITS(temp, nbits)              \
+  }
 
 /* Although it is exceedingly rare, it is possible for a Huffman-encoded
  * coefficient block to be larger than the 128-byte unencoded block.  For each
@@ -460,78 +489,95 @@ dump_buffer(working_state *state)
  * scanning order-- 1, 8, 16, etc.), then this will produce an encoded block
  * larger than 200 bytes.
  */
-#define BUFSIZE  (DCTSIZE2 * 8)
+#define BUFSIZE (DCTSIZE2 * 8)
 
-#define LOAD_BUFFER() { \
-  if (state->free_in_buffer < BUFSIZE) { \
-    localbuf = 1; \
-    buffer = _buffer; \
-  } else \
-    buffer = state->next_output_byte; \
-}
+#define LOAD_BUFFER()                    \
+  {                                      \
+    if (state->free_in_buffer < BUFSIZE) \
+    {                                    \
+      localbuf = 1;                      \
+      buffer = _buffer;                  \
+    }                                    \
+    else                                 \
+      buffer = state->next_output_byte;  \
+  }
 
-#define STORE_BUFFER() { \
-  if (localbuf) { \
-    size_t bytes, bytestocopy; \
-    bytes = buffer - _buffer; \
-    buffer = _buffer; \
-    while (bytes > 0) { \
-      bytestocopy = MIN(bytes, state->free_in_buffer); \
-      memcpy(state->next_output_byte, buffer, bytestocopy); \
-      state->next_output_byte += bytestocopy; \
-      buffer += bytestocopy; \
-      state->free_in_buffer -= bytestocopy; \
-      if (state->free_in_buffer == 0) \
-        if (!dump_buffer(state)) return FALSE; \
-      bytes -= bytestocopy; \
-    } \
-  } else { \
-    state->free_in_buffer -= (buffer - state->next_output_byte); \
-    state->next_output_byte = buffer; \
-  } \
-}
-
+#define STORE_BUFFER()                                             \
+  {                                                                \
+    if (localbuf)                                                  \
+    {                                                              \
+      size_t bytes, bytestocopy;                                   \
+      bytes = buffer - _buffer;                                    \
+      buffer = _buffer;                                            \
+      while (bytes > 0)                                            \
+      {                                                            \
+        bytestocopy = MIN(bytes, state->free_in_buffer);           \
+        memcpy(state->next_output_byte, buffer, bytestocopy);      \
+        state->next_output_byte += bytestocopy;                    \
+        buffer += bytestocopy;                                     \
+        state->free_in_buffer -= bytestocopy;                      \
+        if (state->free_in_buffer == 0)                            \
+          if (!dump_buffer(state))                                 \
+            return FALSE;                                          \
+        bytes -= bytestocopy;                                      \
+      }                                                            \
+    }                                                              \
+    else                                                           \
+    {                                                              \
+      state->free_in_buffer -= (buffer - state->next_output_byte); \
+      state->next_output_byte = buffer;                            \
+    }                                                              \
+  }
 
 LOCAL(boolean)
 flush_bits(working_state *state)
 {
   JOCTET _buffer[BUFSIZE], *buffer, temp;
-  simd_bit_buf_type put_buffer;  int put_bits;
+  simd_bit_buf_type put_buffer;
+  int put_bits;
   int localbuf = 0;
 
-  if (state->simd) {
+  if (state->simd)
+  {
 #if defined(__aarch64__) && !defined(NEON_INTRINSICS)
     put_bits = state->cur.free_bits;
 #else
     put_bits = SIMD_BIT_BUF_SIZE - state->cur.free_bits;
 #endif
     put_buffer = state->cur.put_buffer.simd;
-  } else {
+  }
+  else
+  {
     put_bits = BIT_BUF_SIZE - state->cur.free_bits;
     put_buffer = state->cur.put_buffer.c;
   }
 
   LOAD_BUFFER()
 
-  while (put_bits >= 8) {
+  while (put_bits >= 8)
+  {
     put_bits -= 8;
     temp = (JOCTET)(put_buffer >> put_bits);
     EMIT_BYTE(temp)
   }
-  if (put_bits) {
+  if (put_bits)
+  {
     /* fill partial byte with ones */
     temp = (JOCTET)((put_buffer << (8 - put_bits)) | (0xFF >> put_bits));
     EMIT_BYTE(temp)
   }
 
-  if (state->simd) {                    /* and reset bit buffer to empty */
+  if (state->simd)
+  { /* and reset bit buffer to empty */
     state->cur.put_buffer.simd = 0;
 #if defined(__aarch64__) && !defined(NEON_INTRINSICS)
     state->cur.free_bits = 0;
 #else
     state->cur.free_bits = SIMD_BIT_BUF_SIZE;
 #endif
-  } else {
+  }
+  else
+  {
     state->cur.put_buffer.c = 0;
     state->cur.free_bits = BIT_BUF_SIZE;
   }
@@ -539,7 +585,6 @@ flush_bits(working_state *state)
 
   return TRUE;
 }
-
 
 /* Encode a single block's worth of coefficients */
 
@@ -574,6 +619,7 @@ encode_one_block(working_state *state, JCOEFPTR block, int last_dc_val,
   LOAD_BUFFER()
 
   /* Encode the DC coefficient difference per section F.1.2.1 */
+  // fprintf(stderr, "/* Encode the DC coefficient difference per section F.1.2.1 */");
 
   temp = block[0] - last_dc_val;
 
@@ -596,50 +642,109 @@ encode_one_block(working_state *state, JCOEFPTR block, int last_dc_val,
   PUT_CODE(dctbl->ehufco[nbits], dctbl->ehufsi[nbits])
 
   /* Encode the AC coefficients per section F.1.2.2 */
+  // fprintf(stderr, "/* Encode the AC coefficient difference per section F.1.2.2 */");
 
   {
-    int r = 0;                  /* r = run length of zeros */
+    int r = 0; /* r = run length of zeros */
 
 /* Manually unroll the k loop to eliminate the counter variable.  This
  * improves performance greatly on systems with a limited number of
  * registers (such as x86.)
  */
-#define kloop(jpeg_natural_order_of_k) { \
-  if ((temp = block[jpeg_natural_order_of_k]) == 0) { \
-    r += 16; \
-  } else { \
-    /* Branch-less absolute value, bitwise complement, etc., same as above */ \
-    nbits = temp >> (CHAR_BIT * sizeof(int) - 1); \
-    temp += nbits; \
-    nbits ^= temp; \
-    nbits = JPEG_NBITS_NONZERO(nbits); \
-    /* if run length > 15, must emit special run-length-16 codes (0xF0) */ \
-    while (r >= 16 * 16) { \
-      r -= 16 * 16; \
-      PUT_BITS(actbl->ehufco[0xf0], actbl->ehufsi[0xf0]) \
-    } \
-    /* Emit Huffman symbol for run length / number of bits */ \
-    r += nbits; \
-    PUT_CODE(actbl->ehufco[r], actbl->ehufsi[r]) \
-    r = 0; \
-  } \
-}
+#define kloop(jpeg_natural_order_of_k)                                          \
+  {                                                                             \
+    if ((temp = block[jpeg_natural_order_of_k]) == 0)                           \
+    {                                                                           \
+      r += 16;                                                                  \
+    }                                                                           \
+    else                                                                        \
+    {                                                                           \
+      /* Branch-less absolute value, bitwise complement, etc., same as above */ \
+      nbits = temp >> (CHAR_BIT * sizeof(int) - 1);                             \
+      temp += nbits;                                                            \
+      nbits ^= temp;                                                            \
+      nbits = JPEG_NBITS_NONZERO(nbits);                                        \
+      /* if run length > 15, must emit special run-length-16 codes (0xF0) */    \
+      while (r >= 16 * 16)                                                      \
+      {                                                                         \
+        r -= 16 * 16;                                                           \
+        PUT_BITS(actbl->ehufco[0xf0], actbl->ehufsi[0xf0])                      \
+      }                                                                         \
+      /* Emit Huffman symbol for run length / number of bits */                 \
+      r += nbits;                                                               \
+      PUT_CODE(actbl->ehufco[r], actbl->ehufsi[r])                              \
+      r = 0;                                                                    \
+    }                                                                           \
+  }
 
     /* One iteration for each value in jpeg_natural_order[] */
-    kloop(1);   kloop(8);   kloop(16);  kloop(9);   kloop(2);   kloop(3);
-    kloop(10);  kloop(17);  kloop(24);  kloop(32);  kloop(25);  kloop(18);
-    kloop(11);  kloop(4);   kloop(5);   kloop(12);  kloop(19);  kloop(26);
-    kloop(33);  kloop(40);  kloop(48);  kloop(41);  kloop(34);  kloop(27);
-    kloop(20);  kloop(13);  kloop(6);   kloop(7);   kloop(14);  kloop(21);
-    kloop(28);  kloop(35);  kloop(42);  kloop(49);  kloop(56);  kloop(57);
-    kloop(50);  kloop(43);  kloop(36);  kloop(29);  kloop(22);  kloop(15);
-    kloop(23);  kloop(30);  kloop(37);  kloop(44);  kloop(51);  kloop(58);
-    kloop(59);  kloop(52);  kloop(45);  kloop(38);  kloop(31);  kloop(39);
-    kloop(46);  kloop(53);  kloop(60);  kloop(61);  kloop(54);  kloop(47);
-    kloop(55);  kloop(62);  kloop(63);
+    kloop(1);
+    kloop(8);
+    kloop(16);
+    kloop(9);
+    kloop(2);
+    kloop(3);
+    kloop(10);
+    kloop(17);
+    kloop(24);
+    kloop(32);
+    kloop(25);
+    kloop(18);
+    kloop(11);
+    kloop(4);
+    kloop(5);
+    kloop(12);
+    kloop(19);
+    kloop(26);
+    kloop(33);
+    kloop(40);
+    kloop(48);
+    kloop(41);
+    kloop(34);
+    kloop(27);
+    kloop(20);
+    kloop(13);
+    kloop(6);
+    kloop(7);
+    kloop(14);
+    kloop(21);
+    kloop(28);
+    kloop(35);
+    kloop(42);
+    kloop(49);
+    kloop(56);
+    kloop(57);
+    kloop(50);
+    kloop(43);
+    kloop(36);
+    kloop(29);
+    kloop(22);
+    kloop(15);
+    kloop(23);
+    kloop(30);
+    kloop(37);
+    kloop(44);
+    kloop(51);
+    kloop(58);
+    kloop(59);
+    kloop(52);
+    kloop(45);
+    kloop(38);
+    kloop(31);
+    kloop(39);
+    kloop(46);
+    kloop(53);
+    kloop(60);
+    kloop(61);
+    kloop(54);
+    kloop(47);
+    kloop(55);
+    kloop(62);
+    kloop(63);
 
     /* If the last coef(s) were zero, emit an end-of-block code */
-    if (r > 0) {
+    if (r > 0)
+    {
       PUT_BITS(actbl->ehufco[0], actbl->ehufsi[0])
     }
   }
@@ -650,7 +755,6 @@ encode_one_block(working_state *state, JCOEFPTR block, int last_dc_val,
 
   return TRUE;
 }
-
 
 /*
  * Emit a restart marker & resynchronize predictions.
@@ -676,7 +780,6 @@ emit_restart(working_state *state, int restart_num)
   return TRUE;
 }
 
-
 /*
  * Encode and output one MCU's worth of Huffman-compressed coefficients.
  */
@@ -697,15 +800,18 @@ encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
   state.simd = entropy->simd;
 
   /* Emit restart marker if needed */
-  if (cinfo->restart_interval) {
+  if (cinfo->restart_interval)
+  {
     if (entropy->restarts_to_go == 0)
       if (!emit_restart(&state, entropy->next_restart_num))
         return FALSE;
   }
 
   /* Encode the MCU data blocks */
-  if (entropy->simd) {
-    for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++) {
+  if (entropy->simd)
+  {
+    for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++)
+    {
       ci = cinfo->MCU_membership[blkn];
       compptr = cinfo->cur_comp_info[ci];
       if (!encode_one_block_simd(&state,
@@ -716,8 +822,11 @@ encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
       /* Update last_dc_val */
       state.cur.last_dc_val[ci] = MCU_data[blkn][0][0];
     }
-  } else {
-    for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++) {
+  }
+  else
+  {
+    for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++)
+    {
       ci = cinfo->MCU_membership[blkn];
       compptr = cinfo->cur_comp_info[ci];
       if (!encode_one_block(&state,
@@ -736,8 +845,10 @@ encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
   entropy->saved = state.cur;
 
   /* Update restart-interval state too */
-  if (cinfo->restart_interval) {
-    if (entropy->restarts_to_go == 0) {
+  if (cinfo->restart_interval)
+  {
+    if (entropy->restarts_to_go == 0)
+    {
       entropy->restarts_to_go = cinfo->restart_interval;
       entropy->next_restart_num++;
       entropy->next_restart_num &= 7;
@@ -747,7 +858,6 @@ encode_mcu_huff(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
 
   return TRUE;
 }
-
 
 /*
  * Finish up at the end of a Huffman-compressed scan.
@@ -776,7 +886,6 @@ finish_pass_huff(j_compress_ptr cinfo)
   entropy->saved = state.cur;
 }
 
-
 /*
  * Huffman coding optimization.
  *
@@ -789,7 +898,6 @@ finish_pass_huff(j_compress_ptr cinfo)
  */
 
 #ifdef ENTROPY_OPT_SUPPORTED
-
 
 /* Process a single block's worth of coefficients */
 
@@ -809,7 +917,8 @@ htest_one_block(j_compress_ptr cinfo, JCOEFPTR block, int last_dc_val,
 
   /* Find the number of bits needed for the magnitude of the coefficient */
   nbits = 0;
-  while (temp) {
+  while (temp)
+  {
     nbits++;
     temp >>= 1;
   }
@@ -824,14 +933,19 @@ htest_one_block(j_compress_ptr cinfo, JCOEFPTR block, int last_dc_val,
 
   /* Encode the AC coefficients per section F.1.2.2 */
 
-  r = 0;                        /* r = run length of zeros */
+  r = 0; /* r = run length of zeros */
 
-  for (k = 1; k < DCTSIZE2; k++) {
-    if ((temp = block[jpeg_natural_order[k]]) == 0) {
+  for (k = 1; k < DCTSIZE2; k++)
+  {
+    if ((temp = block[jpeg_natural_order[k]]) == 0)
+    {
       r++;
-    } else {
+    }
+    else
+    {
       /* if run length > 15, must emit special run-length-16 codes (0xF0) */
-      while (r > 15) {
+      while (r > 15)
+      {
         ac_counts[0xF0]++;
         r -= 16;
       }
@@ -841,7 +955,7 @@ htest_one_block(j_compress_ptr cinfo, JCOEFPTR block, int last_dc_val,
         temp = -temp;
 
       /* Find the number of bits needed for the magnitude of the coefficient */
-      nbits = 1;                /* there must be at least one 1 bit */
+      nbits = 1; /* there must be at least one 1 bit */
       while ((temp >>= 1))
         nbits++;
       /* Check for out-of-range coefficient values */
@@ -860,7 +974,6 @@ htest_one_block(j_compress_ptr cinfo, JCOEFPTR block, int last_dc_val,
     ac_counts[0]++;
 }
 
-
 /*
  * Trial-encode one MCU's worth of Huffman-compressed coefficients.
  * No data is actually output, so no suspension return is possible.
@@ -874,8 +987,10 @@ encode_mcu_gather(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
   jpeg_component_info *compptr;
 
   /* Take care of restart intervals if needed */
-  if (cinfo->restart_interval) {
-    if (entropy->restarts_to_go == 0) {
+  if (cinfo->restart_interval)
+  {
+    if (entropy->restarts_to_go == 0)
+    {
       /* Re-initialize DC predictions to 0 */
       for (ci = 0; ci < cinfo->comps_in_scan; ci++)
         entropy->saved.last_dc_val[ci] = 0;
@@ -885,7 +1000,8 @@ encode_mcu_gather(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
     entropy->restarts_to_go--;
   }
 
-  for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++) {
+  for (blkn = 0; blkn < cinfo->blocks_in_MCU; blkn++)
+  {
     ci = cinfo->MCU_membership[blkn];
     compptr = cinfo->cur_comp_info[ci];
     htest_one_block(cinfo, MCU_data[blkn][0], entropy->saved.last_dc_val[ci],
@@ -896,7 +1012,6 @@ encode_mcu_gather(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
 
   return TRUE;
 }
-
 
 /*
  * Generate the best Huffman code table for the given counts, fill htbl.
@@ -930,10 +1045,10 @@ encode_mcu_gather(j_compress_ptr cinfo, JBLOCKROW *MCU_data)
 GLOBAL(void)
 jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
 {
-#define MAX_CLEN  32            /* assumed maximum initial code length */
-  UINT8 bits[MAX_CLEN + 1];     /* bits[k] = # of symbols with code length k */
-  int codesize[257];            /* codesize[k] = code length of symbol k */
-  int others[257];              /* next symbol in current branch of tree */
+#define MAX_CLEN 32         /* assumed maximum initial code length */
+  UINT8 bits[MAX_CLEN + 1]; /* bits[k] = # of symbols with code length k */
+  int codesize[257];        /* codesize[k] = code length of symbol k */
+  int others[257];          /* next symbol in current branch of tree */
   int c1, c2;
   int p, i, j;
   long v;
@@ -943,9 +1058,9 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
   memset(bits, 0, sizeof(bits));
   memset(codesize, 0, sizeof(codesize));
   for (i = 0; i < 257; i++)
-    others[i] = -1;             /* init links to empty */
+    others[i] = -1; /* init links to empty */
 
-  freq[256] = 1;                /* make sure 256 has a nonzero count */
+  freq[256] = 1; /* make sure 256 has a nonzero count */
   /* Including the pseudo-symbol 256 in the Huffman procedure guarantees
    * that no real symbol is given code-value of all ones, because 256
    * will be placed last in the largest codeword category.
@@ -953,13 +1068,16 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
 
   /* Huffman's basic algorithm to assign optimal code lengths to symbols */
 
-  for (;;) {
+  for (;;)
+  {
     /* Find the smallest nonzero frequency, set c1 = its symbol */
     /* In case of ties, take the larger symbol number */
     c1 = -1;
     v = 1000000000L;
-    for (i = 0; i <= 256; i++) {
-      if (freq[i] && freq[i] <= v) {
+    for (i = 0; i <= 256; i++)
+    {
+      if (freq[i] && freq[i] <= v)
+      {
         v = freq[i];
         c1 = i;
       }
@@ -969,8 +1087,10 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
     /* In case of ties, take the larger symbol number */
     c2 = -1;
     v = 1000000000L;
-    for (i = 0; i <= 256; i++) {
-      if (freq[i] && freq[i] <= v && i != c1) {
+    for (i = 0; i <= 256; i++)
+    {
+      if (freq[i] && freq[i] <= v && i != c1)
+      {
         v = freq[i];
         c2 = i;
       }
@@ -986,24 +1106,28 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
 
     /* Increment the codesize of everything in c1's tree branch */
     codesize[c1]++;
-    while (others[c1] >= 0) {
+    while (others[c1] >= 0)
+    {
       c1 = others[c1];
       codesize[c1]++;
     }
 
-    others[c1] = c2;            /* chain c2 onto c1's tree branch */
+    others[c1] = c2; /* chain c2 onto c1's tree branch */
 
     /* Increment the codesize of everything in c2's tree branch */
     codesize[c2]++;
-    while (others[c2] >= 0) {
+    while (others[c2] >= 0)
+    {
       c2 = others[c2];
       codesize[c2]++;
     }
   }
 
   /* Now count the number of symbols of each code length */
-  for (i = 0; i <= 256; i++) {
-    if (codesize[i]) {
+  for (i = 0; i <= 256; i++)
+  {
+    if (codesize[i])
+    {
       /* The JPEG standard seems to think that this can't happen, */
       /* but I'm paranoid... */
       if (codesize[i] > MAX_CLEN)
@@ -1024,21 +1148,23 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
    * words one bit longer.
    */
 
-  for (i = MAX_CLEN; i > 16; i--) {
-    while (bits[i] > 0) {
-      j = i - 2;                /* find length of new prefix to be used */
+  for (i = MAX_CLEN; i > 16; i--)
+  {
+    while (bits[i] > 0)
+    {
+      j = i - 2; /* find length of new prefix to be used */
       while (bits[j] == 0)
         j--;
 
-      bits[i] -= 2;             /* remove two symbols */
-      bits[i - 1]++;            /* one goes in this length */
-      bits[j + 1] += 2;         /* two new symbols in this length */
-      bits[j]--;                /* symbol of this length is now a prefix */
+      bits[i] -= 2;     /* remove two symbols */
+      bits[i - 1]++;    /* one goes in this length */
+      bits[j + 1] += 2; /* two new symbols in this length */
+      bits[j]--;        /* symbol of this length is now a prefix */
     }
   }
 
   /* Remove the count for the pseudo-symbol 256 from the largest codelength */
-  while (bits[i] == 0)          /* find largest codelength still in use */
+  while (bits[i] == 0) /* find largest codelength still in use */
     i--;
   bits[i]--;
 
@@ -1051,9 +1177,12 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
    * this works.
    */
   p = 0;
-  for (i = 1; i <= MAX_CLEN; i++) {
-    for (j = 0; j <= 255; j++) {
-      if (codesize[j] == i) {
+  for (i = 1; i <= MAX_CLEN; i++)
+  {
+    for (j = 0; j <= 255; j++)
+    {
+      if (codesize[j] == i)
+      {
         htbl->huffval[p] = (UINT8)j;
         p++;
       }
@@ -1063,7 +1192,6 @@ jpeg_gen_optimal_table(j_compress_ptr cinfo, JHUFF_TBL *htbl, long freq[])
   /* Set sent_table FALSE so updated table will be written to JPEG file. */
   htbl->sent_table = FALSE;
 }
-
 
 /*
  * Finish up a statistics-gathering pass and create the new Huffman tables.
@@ -1085,18 +1213,21 @@ finish_pass_gather(j_compress_ptr cinfo)
   memset(did_dc, 0, sizeof(did_dc));
   memset(did_ac, 0, sizeof(did_ac));
 
-  for (ci = 0; ci < cinfo->comps_in_scan; ci++) {
+  for (ci = 0; ci < cinfo->comps_in_scan; ci++)
+  {
     compptr = cinfo->cur_comp_info[ci];
     dctbl = compptr->dc_tbl_no;
     actbl = compptr->ac_tbl_no;
-    if (!did_dc[dctbl]) {
+    if (!did_dc[dctbl])
+    {
       htblptr = &cinfo->dc_huff_tbl_ptrs[dctbl];
       if (*htblptr == NULL)
         *htblptr = jpeg_alloc_huff_table((j_common_ptr)cinfo);
       jpeg_gen_optimal_table(cinfo, *htblptr, entropy->dc_count_ptrs[dctbl]);
       did_dc[dctbl] = TRUE;
     }
-    if (!did_ac[actbl]) {
+    if (!did_ac[actbl])
+    {
       htblptr = &cinfo->ac_huff_tbl_ptrs[actbl];
       if (*htblptr == NULL)
         *htblptr = jpeg_alloc_huff_table((j_common_ptr)cinfo);
@@ -1106,9 +1237,7 @@ finish_pass_gather(j_compress_ptr cinfo)
   }
 }
 
-
 #endif /* ENTROPY_OPT_SUPPORTED */
-
 
 /*
  * Module initialization routine for Huffman entropy encoding.
@@ -1120,14 +1249,14 @@ jinit_huff_encoder(j_compress_ptr cinfo)
   huff_entropy_ptr entropy;
   int i;
 
-  entropy = (huff_entropy_ptr)
-    (*cinfo->mem->alloc_small) ((j_common_ptr)cinfo, JPOOL_IMAGE,
-                                sizeof(huff_entropy_encoder));
+  entropy = (huff_entropy_ptr)(*cinfo->mem->alloc_small)((j_common_ptr)cinfo, JPOOL_IMAGE,
+                                                         sizeof(huff_entropy_encoder));
   cinfo->entropy = (struct jpeg_entropy_encoder *)entropy;
   entropy->pub.start_pass = start_pass_huff;
 
   /* Mark tables unallocated */
-  for (i = 0; i < NUM_HUFF_TBLS; i++) {
+  for (i = 0; i < NUM_HUFF_TBLS; i++)
+  {
     entropy->dc_derived_tbls[i] = entropy->ac_derived_tbls[i] = NULL;
 #ifdef ENTROPY_OPT_SUPPORTED
     entropy->dc_count_ptrs[i] = entropy->ac_count_ptrs[i] = NULL;

@@ -1,0 +1,9 @@
+# Progressive scan script using only spectral selection
+# (no successive approximation):
+
+        
+0,1,2: 0-0,   0, 0 ;
+0:     1-5,   0, 0 ;    # First two Y AC coefficients
+2:     1-63,  0, 0 ;    # All AC coefficients for Cr
+1:     1-63,  0, 0 ;    # All AC coefficients for Cb
+0:     6-63,  0, 0 ;    # Remaining Y coefficients

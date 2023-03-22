@@ -25,6 +25,12 @@
 #include "jchuff.h"
 #include <assert.h>
 #include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include <time.h>
+
+#include "report.h" //nh
 
 FILE *fptr;
 FILE *rptr;
@@ -65,7 +71,7 @@ typedef struct
   preprocess_method_ptr preprocess;
   quantize_method_ptr quantize;
 
-  /* The actual post-DCT divisors --- not identical to the quant table
+  /* The actual post-DC T divisors --- not identical to the quant table
    * entries, because of scaling (especially for an unnormalized DCT).
    * Each table is given in normal array order.
    */
@@ -197,7 +203,7 @@ compute_reciprocal(UINT16 divisor, DCTELEM *dtbl)
   {
     /* divisor == 1 means unquantized, so these reciprocal/correction/shift
      * values will cause the C quantization algorithm to act like the
-     * identity function.  Since only the C quantization algorithm is used in
+     * identity function.  Since only the C quantization algorithm is used  in
      * these cases, the scale value is irrelevant.
      */
     dtbl[DCTSIZE2 * 0] = (DCTELEM)1;                      /* reciprocal */
@@ -221,6 +227,7 @@ compute_reciprocal(UINT16 divisor, DCTELEM *dtbl)
     fq >>= 1;
     r--;
   }
+
   else if (fr <= (divisor / 2U))
   { /* fractional part is < 0.5 */
     c++;
@@ -426,7 +433,6 @@ preprocess_deringing(DCTELEM *data, const JQUANT_TBL *quantization_table)
 {
   const DCTELEM maxsample = 255 - CENTERJSAMPLE;
   const int size = DCTSIZE * DCTSIZE;
-
   /* Decoders don't handle overflow of DC very well, so calculate
      maximum overflow that is safe to do without increasing DC out of range */
   int sum = 0;
@@ -513,7 +519,6 @@ preprocess_deringing(DCTELEM *data, const JQUANT_TBL *quantization_table)
     n++;
   } while (n < size);
 }
-
 /*
   Float version of preprocess_deringing()
  */
@@ -751,6 +756,7 @@ forward_DCT(j_compress_ptr cinfo, jpeg_component_info *compptr,
 
   for (bi = 0; bi < num_blocks; bi++, start_col += DCTSIZE)
   {
+
     /* Load data into workspace, applying unsigned->signed conversion */
     (*do_convsamp)(sample_data, start_col, workspace);
 
@@ -1029,12 +1035,18 @@ static const float jpeg_lambda_weights_csf_luma[64] = {
 };
 
 #define DC_TRELLIS_MAX_CANDIDATES 9
+int count = 0;
+int quantize_trellis_count = 0;
+int diff_counter = 0;
 
 LOCAL(int)
 get_num_dc_trellis_candidates(int dc_quantval)
 {
+
   /* Higher qualities can tolerate higher DC distortion */
-  return MIN(DC_TRELLIS_MAX_CANDIDATES, (2 + 60 / dc_quantval) | 1);
+  int dc_trellis_candidates = MIN(DC_TRELLIS_MAX_CANDIDATES, (2 + 60 / dc_quantval) | 1);
+  // fprintf(stderr, "\n 1034 Function get_num_dc_trellis_candidates(int dc_quantval): dc_quantval = %i, number of dc_trellis_candidates= %i\n", dc_quantval, dc_trellis_candidates);
+  return dc_trellis_candidates;
 }
 
 GLOBAL(void)
@@ -1042,11 +1054,16 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
                  JQUANT_TBL *qtbl, double *norm_src, double *norm_coef, JCOEF *last_dc_val,
                  JBLOCKROW coef_blocks_above, JBLOCKROW src_above)
 {
+  time_t ltime;       /* calendar time */
+  ltime = time(NULL); /* get current cal time */
+  fprintf(stderr, "Start trellis %s\n", asctime(localtime(&ltime)));
+  fprintf(fptr, "_______________________________________________________________________________ Start Trellis Quantization - Iteration %i (Nr. of function calls)_______________________________________________________________________________ \n", quantize_trellis_count);
+
   int i, j, k, l;
-  float accumulated_zero_dist[DCTSIZE2];
+  float accumulated_zero_dist[DCTSIZE2]; // DCTSIZE2 = 64
   float accumulated_cost[DCTSIZE2];
   int run_start[DCTSIZE2];
-  int bi;
+  int bi; // nh: block index
   float best_cost;
   int last_coeff_idx; /* position of last nonzero coefficient */
   float norm = 0.0;
@@ -1079,6 +1096,11 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
     Ss = 1;
   if (Se < Ss)
     return;
+
+  int zero_out_count = 0;
+  int init_zero_count = 0;
+
+  // default off
   if (cinfo->master->trellis_eob_opt)
   {
     accumulated_zero_block_cost = (float *)malloc((num_blocks + 1) * sizeof(float));
@@ -1098,6 +1120,7 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
     requires_eob[0] = 0;
   }
 
+  // default on
   if (cinfo->master->trellis_quant_dc)
   {
     for (i = 0; i < dc_trellis_candidates; i++)
@@ -1133,6 +1156,11 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
 
   for (bi = 0; bi < num_blocks; bi++)
   {
+    fprintf(huffrecordptr, "bi: %i\n", bi);
+    for (int i = 0; i < 256; i++)
+      fprintf(huffrecordptr, "%i, %i ,%i\n", i, actbl->ehufco[i], actbl->ehufsi[i]);
+
+    fprintf(fptr, "Block index = %i/%i. \n", bi, num_blocks);
 
     norm = 0.0;
     for (i = 1; i < DCTSIZE2; i++)
@@ -1162,6 +1190,7 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
       float dc_candidate_dist;
 
       qval = (x + q / 2) / q; /* quantized value (round nearest) */
+
       for (k = 0; k < dc_trellis_candidates; k++)
       {
         int delta;
@@ -1237,88 +1266,221 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
         }
       }
     }
+    int coef_count = 0;
+    init_zero_count = 0;
+    zero_out_count = 0;
 
     /* Do AC coefficients */
+    fprintf(fptr, "Startin with the quantization of %i AC coefficients (Ss: %i, Se: %i) (Ah: %i, Al: %i) of (%i channel(s)). \n", Se - Ss + 1, Ss, Se, cinfo->Ah, cinfo->Al, cinfo->input_components);
+    fprintf(rptr, "\ncoef, qval, #candidates, closest candidate, delta, kbits, kdist, prev.coef, value, k, coef bits, zero run, run bits, rate, cost, lowest cost, result\n");
+    int initial_coefficients[Se - Ss];
     for (i = Ss; i <= Se; i++)
     {
-      int z = jpeg_natural_order[i];
 
-      int sign = src[bi][z] >> 31;
-      int x = abs(src[bi][z]);
-      int q = 8 * qtbl->quantval[z];
+      coef_count++;
+      // -------------------------------------------------------- SEC: ALLOCATIONS & INITIAL QUANTIZATION -------------------------------------------------------- //
+
+      int z = jpeg_natural_order[i]; // the natural order of the current coeff (1..63)
+      int sign = src[bi][z] >> 31;   // sign only
+      int x = abs(src[bi][z]);       // absolut value of the coef in natural order
+      int q = 8 * qtbl->quantval[z]; // quantval[z] << 3 is the same thing here bc UINT (nh: does this have to do with the rounding to the nearest integer?)
       int candidate[16];
       int candidate_bits[16];
       float candidate_dist[16];
-      int num_candidates;
       int qval;
+      int num_candidates;
+
+      fprintf(fptr, "\n     New current coefficient index=%i. z = %i, sign = %i, x = %i, q = %i, quantval[z] = %i \n", i, z, sign, x, q, qtbl->quantval[z]);
+
+      fprintf(fptr, "     Run so far: [");
+
+      for (int cur = 1; cur < i; cur++)
+      {
+        fprintf(fptr, "%i, ", coef_blocks[bi][jpeg_natural_order[cur]]);
+      }
+      fprintf(fptr, "]\n");
 
       accumulated_zero_dist[i] = x * x * lambda * lambda_tbl[z] + accumulated_zero_dist[i - 1];
+      fprintf(fptr, "     accumulated_zero_dist[i](%.2f) = x(%i) * x * lambda(%.2f) * lambda_tbl[z](%.2f) + accumulated_zero_dist[i - 1](%.2f);\n", accumulated_zero_dist[i], x, lambda, lambda_tbl[z], accumulated_zero_dist[i - 1]);
 
       qval = (x + q / 2) / q; /* quantized value (round nearest) */
+      int initial_qval = qval;
+      initial_coefficients[i] = qval;
+      fprintf(fptr, "     qval(%i) = (x + q / 2) / q;\n", qval);
 
+      // fprintf(stderr, "1 Block: coef value = %i, coef index = %i, qval = %i,  ", src[bi][i], i, qval);
       if (qval == 0)
       {
+        fprintf(fptr, "     RESULT: The quantized value of coef %i: was %i --> Putting the result coef_blocks[%i][%i] to 0 \n", x, qval, bi, z);
+
         coef_blocks[bi][z] = 0;
-        accumulated_cost[i] = 1e38; /* Shouldn't be needed */
+        accumulated_cost[i] = 1e38; /* Shouldn't be needed */ // nh: why is it there, then?
+        init_zero_count++;
+
         continue;
       }
-
-      if (qval >= (1 << MAX_COEF_BITS))
+      if (qval >= (1 << MAX_COEF_BITS)) // cannot be negative, because x is absolute
         qval = (1 << MAX_COEF_BITS) - 1;
 
+      /* nh: fill rate and distortion value for all candidates*/
+
       num_candidates = jpeg_nbits_table[qval];
+
+      fprintf(fptr, "     Preparing the %i candidates for all bit sizes. \n", num_candidates);
+
       for (k = 0; k < num_candidates; k++)
+      /*
+        We prepare the candidates for all possible bit size (i.e. candidae_bits)
+        by creating an Int with `k+1` ones as a "Mask", eg. for k=1  =>  00000011 we have "2 bits"
+        and then we will save the prepared "Mask" in `candidates`, and the count of bits in `candidate_bits`
+      */
       {
+        fprintf(fptr, "         k = %i. \n", k);
+
+        // nh: for all candidates get the one, that is closest to the initial quantized value, so that the distortion will be the lowest
         int delta;
-        candidate[k] = (k < num_candidates - 1) ? (2 << k) - 1 : qval;
-        delta = candidate[k] * q - x;
+        if (k < num_candidates - 1)
+        {
+          candidate[k] = (2 << k) - 1; // 00010 < k :   k = 1  ;  00100    ;   00011
+        }
+        else
+        {
+          candidate[k] = qval;
+        }
+        fprintf(fptr, "         Candidate k: %i has  candidate[k]: %i\n", k, candidate[k]);
+
+        // calculate the delta between the candidate, being (rounded to the nearest integer) and the unquantized coefficient.
+        delta = candidate[k] * q - x; // TODO:  "MASK" * (quantval[z] << 3)  -  "current-coefficient"
+        fprintf(fptr, "         delta(%i) = (candidate[k] (%i) * q (%i) - x (%i)) \n", delta, candidate[k], q, x);
+
+        // store bits of candidate
         candidate_bits[k] = k + 1;
-        candidate_dist[k] = delta * delta * lambda * lambda_tbl[z];
+        fprintf(fptr, "         candidate_bits[k](%i) = k(%i) + 1; \n", candidate_bits[k], k);
+
+        // store the distortion for every candidate.
+        candidate_dist[k] = delta * delta * lambda * lambda_tbl[z]; // Calculates the DISTORTION
+        fprintf(fptr, "         candidate_dist[k](%.2f)  = delta * delta (%i) * lambda (%.2f) * lambda_tbl[z](%.2f);\n", candidate_dist[k], delta, lambda, lambda_tbl[z]);
       }
 
       accumulated_cost[i] = 1e38;
 
-      for (j = Ss - 1; j < i; j++)
+      /*
+        Comparison to figure out which candidate has the least COST
+      */
+      for (j = Ss - 1; j < i; j++) // assuming: starts with 0, but 1 is for DC
       {
+        fprintf(fptr, "          Quantized coefficient was not 0 --> New loop over all previeous coefficients.\n");
+
         int zz = jpeg_natural_order[j];
         if (j != Ss - 1 && coef_blocks[bi][zz] == 0)
           continue;
 
         zero_run = i - 1 - j;
-        if ((zero_run >> 4) && actbl->ehufsi[0xf0] == 0)
-          continue;
+        fprintf(fptr, "          zero_run(%i) = i(%i) - 1 - j(%i); \n", zero_run, i, j);
 
+        // fprintf(fptr, "          Number of zero runs between previous coeff j (%i) and current coeff i (%i): %i zero runs. \n", j, i, zero_run);
+        // nh: if a zero run exceeds 15 and we have reached the EOB (end of block), we stop.
+        if ((zero_run >> 4) && actbl->ehufsi[0xf0] == 0)
+        {
+          fprintf(fptr, "          (zero_run >> 4) && actbl->ehufsi[0xf0] == 0 TRUE \n");
+          continue;
+        }
+
+        // nh: if zero_run exceeds 15 ((zero_run >> 4) == 1), run_bits = hufmansize for value 15*16 (240, called ZRL)
         run_bits = (zero_run >> 4) * actbl->ehufsi[0xf0];
-        zero_run &= 15;
+        fprintf(fptr, "          Run Bits = %i \n", run_bits);
+
+        zero_run &= 15; // zero_run = zero_run && 00001111  (MASK) // nh: reset to 0, if zero_run of 15 is exceeded
+        fprintf(fptr, "          zero_run(%i) &= 15; \n", zero_run);
+
+        fprintf(fptr, "          Getting the coef_bits for each candidate (total %i).\n", num_candidates);
+        fprintf(fptr, "          Previous coeff j (%i) has %i candidates, %i zero_runs and %i run_bits.\n", j, num_candidates, zero_run, run_bits);
 
         for (k = 0; k < num_candidates; k++)
-        {
-          int coef_bits = actbl->ehufsi[16 * zero_run + candidate_bits[k]];
-          if (coef_bits == 0)
-            continue;
 
+        {
+
+          int coef_bits = actbl->ehufsi[16 * zero_run + candidate_bits[k]];
+          fprintf(fptr, "                    int coef_bits(%i) = actbl->ehufsi[16 * zero_run(%i) + candidate_bits[k](%i)];\n", coef_bits, zero_run, candidate_bits[k]);
+
+          if (coef_bits == 0)
+          {
+            /* If no code has been allocated for a symbol S, ehufsi[S] contains 0 */
+            fprintf(fptr, "                    coef_bits == 0 TRUE\n");
+            continue;
+          }
           rate = coef_bits + candidate_bits[k] + run_bits;
+          fprintf(fptr, "                    rate(%i) = coef_bits(%i) + candidate_bits[k](%i) + run_bits(%i);\n", rate, coef_bits, candidate_bits[k], run_bits);
+
           cost = rate + candidate_dist[k];
+          fprintf(fptr, "                    cost(%.f) = rate(%i) + candidate_dist[k](%.f);\n", cost, rate, candidate_dist[k]);
+
           cost += accumulated_zero_dist[i - 1] - accumulated_zero_dist[j] + accumulated_cost[j];
+          fprintf(fptr, "                    cost(%.f) += accumulated_zero_dist[i - 1](%.f) - accumulated_zero_dist[j](%.f) + accumulated_cost[j](%.f);\n", cost, accumulated_zero_dist[i - 1], accumulated_zero_dist[j], accumulated_cost[j]);
 
           if (cost < accumulated_cost[i])
+          /*
+            Save LOWEST cost and index-of-cost
+          */
           {
-            coef_blocks[bi][z] = (candidate[k] ^ sign) - sign;
+            fprintf(fptr, "                    Cost of current kandidate %i (%f) is lower than accumulated cost (%f) (lowest cost seen so far).\n", k, cost, accumulated_cost[i]);
+
+            coef_blocks[bi][z] = (candidate[k] ^ sign) - sign; // ^ = bitwise excusive or //  probably "MASK" - 2 if NEGATIVE else "MASK"
+            fprintf(fptr, "                    coef_blocks[bi][z](%i) = (candidate[k](%i) ^ sign(%i)) - sign;\n", coef_blocks[bi][z], candidate[k], sign);
             accumulated_cost[i] = cost;
+            fprintf(fptr, "                    accumulated_cost[i](%.2f) = cost;", accumulated_cost[i]);
+
             run_start[i] = j;
+            fprintf(fptr, "                    run_start[i](%i) = j;\n", j);
+            fprintf(fptr, "                    RESULT: --> Setting the result coef_blocks[%i][%i] to %i. \n\n\n", bi, i, coef_blocks[bi][z]);
           }
         }
       }
+      // fprintf(stderr, " result coeff %i \n", coef_blocks[bi][z]);
+
+      if (initial_qval != abs(coef_blocks[bi][z]))
+      {
+        fprintf(fptr, "\n     For coefficient i %i at bi %i (natural order %i) there is a difference between initial qval (%i) and qval after trellis (%i).\n", i, bi, z, initial_qval, coef_blocks[bi][z]);
+        // fprintf(stderr, "\n     For coefficient i %i at bi %i (natural order %i) there is a difference between initial qval (%i) and qval after trellis (%i).\n", i, bi, z, initial_qval, coef_blocks[bi][z]);
+
+        diff_counter++;
+        // fprintf(stderr, "coeff i %i at bi %i, (natural order %i):  initial qval = %i, qval in the end : %i  ", i, bi, z, initial_qval, coef_blocks[bi][z]);
+        // fprintf(stderr, "They are different \n");
+      }
+
+      // for (int c = 0; k <= sizeof(initial_coefficients); c++)
+      // {
+      //   fprintf(runrecordptr, "%i ", initial_coefficients[c]);
+      // }
+      // fprintf(runrecordptr, "\n");
     }
+    // fprintf(stderr, "diff_counter = %i\n", diff_counter);
+    quantize_trellis_count++;
+    // fprintf(stderr, "");
 
-    last_coeff_idx = Ss - 1;
+    // fprintf(fptr, "End of Iteration %i\n", quantize_trellis_count);
+
+    // END OF "FIRST PART OF AC"
+    fprintf(fptr, "End of AC coefficients for current blockindex %i. \n", bi);
+    // After all DC and AC coefficients of the blockindex are done:
+    last_coeff_idx = Ss - 1; // Why is this always 0, also in case of progressive?
+    fprintf(fptr, "last_coeff_idx(%i) = Ss - 1;\n", last_coeff_idx);
+
     best_cost = accumulated_zero_dist[Se] + actbl->ehufsi[0];
-    cost_all_zeros = accumulated_zero_dist[Se];
-    best_cost_skip = cost_all_zeros;
+    fprintf(fptr, "best_cost(%.2f) = accumulated_zero_dist[Se](%.2f) + actbl->ehufsi[0](%i);\n", best_cost, accumulated_zero_dist[Se], actbl->ehufsi[0]);
 
+    cost_all_zeros = accumulated_zero_dist[Se];
+    fprintf(fptr, "cost_all_zeros(%.2f) = accumulated_zero_dist[Se];\n", cost_all_zeros);
+
+    best_cost_skip = cost_all_zeros; // 64
+    // fprintf(stderr, "block index = %i -- last_coeff_idx = %i, best_cost = %f, cost_all_zeros = %f \n", bi, last_coeff_idx, best_cost, cost_all_zeros);
+    int initial_zero = 0;
+    // This must be runlength encodeing
     for (i = Ss; i <= Se; i++)
     {
+
       int z = jpeg_natural_order[i];
+      // fprintf(stderr, "%i, ", coef_blocks[bi][z]);
       if (coef_blocks[bi][z] != 0)
       {
         float cost = accumulated_cost[i] + accumulated_zero_dist[Se] - accumulated_zero_dist[i];
@@ -1334,11 +1496,13 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
           best_cost_skip = cost_wo_eob;
         }
       }
+      initial_zero++;
     }
 
-    has_eob = (last_coeff_idx < Se) + (last_coeff_idx == Ss - 1);
+    has_eob = (last_coeff_idx < Se) + (last_coeff_idx == Ss - 1); // ?
 
     /* Zero out coefficients that are part of runs */
+    int run_count = 0;
     i = Se;
     while (i >= Ss)
     {
@@ -1346,48 +1510,66 @@ quantize_trellis(j_compress_ptr cinfo, c_derived_tbl *dctbl, c_derived_tbl *actb
       {
         int z = jpeg_natural_order[i];
         coef_blocks[bi][z] = 0;
+        zero_out_count++;
+        // fprintf(stderr, "zero out %i, %i \n", i, bi);
         i--;
       }
       last_coeff_idx = run_start[i];
+      run_count++;
       i--;
     }
+    int z = jpeg_natural_order[i];
 
-    if (cinfo->master->trellis_eob_opt)
-    {
-      accumulated_zero_block_cost[bi + 1] = accumulated_zero_block_cost[bi];
-      accumulated_zero_block_cost[bi + 1] += cost_all_zeros;
-      requires_eob[bi + 1] = has_eob;
+    // for (int c = 0; c < Se; c++)da
+    // {
+    //   fprintf(runrecordptr, "%i ", coef_blocks[bi][jpeg_natural_order[c]]);
+    // }
+    // fprintf(runrecordptr, "\n");
+    // fprintf(runrecordptr, "Function Call: %i, init_zeros = %i, zero-out operations: %i run_counts: %i\n", quantize_trellis_count, init_zero_count, zero_out_count, run_count);
+    // fprintf(runrecordptr, "bi: %i, z: %i, Initial zero count %i \n", bi, z, init_zero_count);
+    // fprintf(runrecordptr, "Zero count %i \n", zero_out_count);
+    zero_out_count = 0;
+    // fprintf(stderr, "function call count %i\n", quantize_trellis_count);
 
-      best_cost = 1e38;
+    // fprintf(stderr, "zeor out count = %i\n", zero_out_count);
 
-      if (has_eob != 2)
-      {
-        for (i = 0; i <= bi; i++)
-        {
-          int zero_block_run;
-          int nbits;
-          float cost;
+    //  // trellis_eob_opt -- default off
+    // if (cinfo->master->trellis_eob_opt)
+    // {
+    //   accumulated_zero_block_cost[bi + 1] = accumulated_zero_block_cost[bi];
+    //   accumulated_zero_block_cost[bi + 1] += cost_all_zeros;
+    //   requires_eob[bi + 1] = has_eob;
 
-          if (requires_eob[i] == 2)
-            continue;
+    //   best_cost = 1e38;
 
-          cost = best_cost_skip; /* cost of coding a nonzero block */
-          cost += accumulated_zero_block_cost[bi];
-          cost -= accumulated_zero_block_cost[i];
-          cost += accumulated_block_cost[i];
-          zero_block_run = bi - i + requires_eob[i];
-          nbits = jpeg_nbits_table[zero_block_run];
-          cost += actbl->ehufsi[16 * nbits] + nbits;
+    //   if (has_eob != 2)
+    //   {
+    //     for (i = 0; i <= bi; i++)
+    //     {
+    //       int zero_block_run;
+    //       int nbits;
+    //       float cost;
 
-          if (cost < best_cost)
-          {
-            block_run_start[bi] = i;
-            best_cost = cost;
-            accumulated_block_cost[bi + 1] = cost;
-          }
-        }
-      }
-    }
+    //       if (requires_eob[i] == 2)
+    //         continue;
+
+    //       cost = best_cost_skip; /* cost of coding a nonzero block */
+    //       cost += accumulated_zero_block_cost[bi];
+    //       cost -= accumulated_zero_block_cost[i];
+    //       cost += accumulated_block_cost[i];
+    //       zero_block_run = bi - i + requires_eob[i];
+    //       nbits = jpeg_nbits_table[zero_block_run];
+    //       cost += actbl->ehufsi[16 * nbits] + nbits;
+
+    //       if (cost < best_cost)
+    //       {
+    //         block_run_start[bi] = i;
+    //         best_cost = cost;
+    //         accumulated_block_cost[bi + 1] = cost;
+    //       }
+    //     }
+    //   }
+    // }
   }
 
   if (cinfo->master->trellis_eob_opt)
@@ -1687,7 +1869,7 @@ quantize_trellis_arith(j_compress_ptr cinfo, arith_rates *r, JBLOCKROW coef_bloc
 
       accumulated_zero_dist[i] = x * x * lambda * lambda_tbl[z] + accumulated_zero_dist[i - 1];
 
-      qval = (x + q / 2) / q; /* quantized value (round nearest) */
+      qval = (x + q / 2) / q; /* quantized value (round nearest)  */
 
       if (qval == 0)
       {

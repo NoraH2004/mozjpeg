@@ -32,22 +32,19 @@
 #define _CRT_SECURE_NO_DEPRECATE
 #endif
 
-#include "cdjpeg.h"             /* Common decls for cjpeg/djpeg applications */
-#include "jversion.h"           /* for version message */
+#include "cdjpeg.h"   /* Common decls for cjpeg/djpeg applications */
+#include "jversion.h" /* for version message */
 #include "jconfigint.h"
 
-#include <ctype.h>              /* to declare isprint() */
-
+#include <ctype.h> /* to declare isprint() */
 
 /* Create the add-on message string table. */
 
-#define JMESSAGE(code, string)  string,
+#define JMESSAGE(code, string) string,
 
-static const char * const cdjpeg_message_table[] = {
+static const char *const cdjpeg_message_table[] = {
 #include "cderror.h"
-  NULL
-};
-
+    NULL};
 
 /*
  * This list defines the known output image formats
@@ -56,22 +53,22 @@ static const char * const cdjpeg_message_table[] = {
  * indeed, you had better do so if you undefine PPM_SUPPORTED.
  */
 
-typedef enum {
-  FMT_BMP,                      /* BMP format (Windows flavor) */
-  FMT_GIF,                      /* GIF format (LZW-compressed) */
-  FMT_GIF0,                     /* GIF format (uncompressed) */
-  FMT_OS2,                      /* BMP format (OS/2 flavor) */
-  FMT_PPM,                      /* PPM/PGM (PBMPLUS formats) */
-  FMT_TARGA,                    /* Targa format */
-  FMT_TIFF                      /* TIFF format */
+typedef enum
+{
+  FMT_BMP,   /* BMP format (Windows flavor) */
+  FMT_GIF,   /* GIF format (LZW-compressed) */
+  FMT_GIF0,  /* GIF format (uncompressed) */
+  FMT_OS2,   /* BMP format (OS/2 flavor) */
+  FMT_PPM,   /* PPM/PGM (PBMPLUS formats) */
+  FMT_TARGA, /* Targa format */
+  FMT_TIFF   /* TIFF format */
 } IMAGE_FORMATS;
 
-#ifndef DEFAULT_FMT             /* so can override from CFLAGS in Makefile */
-#define DEFAULT_FMT     FMT_PPM
+#ifndef DEFAULT_FMT /* so can override from CFLAGS in Makefile */
+#define DEFAULT_FMT FMT_PPM
 #endif
 
 static IMAGE_FORMATS requested_fmt;
-
 
 /*
  * Argument-parsing code.
@@ -81,19 +78,17 @@ static IMAGE_FORMATS requested_fmt;
  * The main program in this file doesn't actually use this capability...
  */
 
-
-static const char *progname;    /* program name for error messages */
-static char *icc_filename;      /* for -icc switch */
-JDIMENSION max_scans;           /* for -maxscans switch */
-static char *outfilename;       /* for -outfile switch */
-boolean memsrc;                 /* for -memsrc switch */
-boolean report;                 /* for -report switch */
+static const char *progname; /* program name for error messages */
+static char *icc_filename;   /* for -icc switch */
+JDIMENSION max_scans;        /* for -maxscans switch */
+static char *outfilename;    /* for -outfile switch */
+boolean memsrc;              /* for -memsrc switch */
+boolean report;              /* for -report switch */
 boolean skip, crop;
 JDIMENSION skip_start, skip_end;
 JDIMENSION crop_x, crop_y, crop_width, crop_height;
-boolean strict;                 /* for -strict switch */
-#define INPUT_BUF_SIZE  4096
-
+boolean strict; /* for -strict switch */
+#define INPUT_BUF_SIZE 4096
 
 LOCAL(void)
 usage(void)
@@ -177,7 +172,6 @@ usage(void)
   exit(EXIT_FAILURE);
 }
 
-
 LOCAL(int)
 parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
                int last_file_arg_seen, boolean for_real)
@@ -194,7 +188,7 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
   char *arg;
 
   /* Set up default JPEG parameters. */
-  requested_fmt = DEFAULT_FMT;  /* set default output file format */
+  requested_fmt = DEFAULT_FMT; /* set default output file format */
   icc_filename = NULL;
   max_scans = 0;
   outfilename = NULL;
@@ -207,66 +201,87 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
 
   /* Scan command line options, adjust parameters */
 
-  for (argn = 1; argn < argc; argn++) {
+  for (argn = 1; argn < argc; argn++)
+  {
     arg = argv[argn];
-    if (*arg != '-') {
+    if (*arg != '-')
+    {
       /* Not a switch, must be a file name argument */
-      if (argn <= last_file_arg_seen) {
-        outfilename = NULL;     /* -outfile applies to just one input file */
-        continue;               /* ignore this name if previously processed */
+      if (argn <= last_file_arg_seen)
+      {
+        outfilename = NULL; /* -outfile applies to just one input file */
+        continue;           /* ignore this name if previously processed */
       }
-      break;                    /* else done parsing switches */
+      break; /* else done parsing switches */
     }
-    arg++;                      /* advance past switch marker character */
+    arg++; /* advance past switch marker character */
 
-    if (keymatch(arg, "bmp", 1)) {
+    if (keymatch(arg, "bmp", 1))
+    {
       /* BMP output format (Windows flavor). */
       requested_fmt = FMT_BMP;
-
-    } else if (keymatch(arg, "colors", 1) || keymatch(arg, "colours", 1) ||
-               keymatch(arg, "quantize", 1) || keymatch(arg, "quantise", 1)) {
+    }
+    else if (keymatch(arg, "colors", 1) || keymatch(arg, "colours", 1) ||
+             keymatch(arg, "quantize", 1) || keymatch(arg, "quantise", 1))
+    {
       /* Do color quantization. */
       int val;
 
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%d", &val) != 1)
         usage();
       cinfo->desired_number_of_colors = val;
       cinfo->quantize_colors = TRUE;
-
-    } else if (keymatch(arg, "dct", 2)) {
+    }
+    else if (keymatch(arg, "dct", 2))
+    {
       /* Select IDCT algorithm. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
-      if (keymatch(argv[argn], "int", 1)) {
+      if (keymatch(argv[argn], "int", 1))
+      {
         cinfo->dct_method = JDCT_ISLOW;
-      } else if (keymatch(argv[argn], "fast", 2)) {
+      }
+      else if (keymatch(argv[argn], "fast", 2))
+      {
         cinfo->dct_method = JDCT_IFAST;
-      } else if (keymatch(argv[argn], "float", 2)) {
+      }
+      else if (keymatch(argv[argn], "float", 2))
+      {
         cinfo->dct_method = JDCT_FLOAT;
-      } else
+      }
+      else
         usage();
-
-    } else if (keymatch(arg, "dither", 2)) {
+    }
+    else if (keymatch(arg, "dither", 2))
+    {
       /* Select dithering algorithm. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
-      if (keymatch(argv[argn], "fs", 2)) {
+      if (keymatch(argv[argn], "fs", 2))
+      {
         cinfo->dither_mode = JDITHER_FS;
-      } else if (keymatch(argv[argn], "none", 2)) {
+      }
+      else if (keymatch(argv[argn], "none", 2))
+      {
         cinfo->dither_mode = JDITHER_NONE;
-      } else if (keymatch(argv[argn], "ordered", 2)) {
+      }
+      else if (keymatch(argv[argn], "ordered", 2))
+      {
         cinfo->dither_mode = JDITHER_ORDERED;
-      } else
+      }
+      else
         usage();
-
-    } else if (keymatch(arg, "debug", 1) || keymatch(arg, "verbose", 1)) {
+    }
+    else if (keymatch(arg, "debug", 1) || keymatch(arg, "verbose", 1))
+    {
       /* Enable debug printouts. */
       /* On first -d, print version identification */
       static boolean printed_version = FALSE;
 
-      if (!printed_version) {
+      if (!printed_version)
+      {
         fprintf(stderr, "%s version %s (build %s)\n",
                 PACKAGE_NAME, VERSION, BUILD);
         fprintf(stderr, "%s\n\n", JCOPYRIGHT);
@@ -275,13 +290,15 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
         printed_version = TRUE;
       }
       cinfo->err->trace_level++;
-
-    } else if (keymatch(arg, "version", 4)) {
+    }
+    else if (keymatch(arg, "version", 4))
+    {
       fprintf(stderr, "%s version %s (build %s)\n",
               PACKAGE_NAME, VERSION, BUILD);
       exit(EXIT_SUCCESS);
-
-    } else if (keymatch(arg, "fast", 1)) {
+    }
+    else if (keymatch(arg, "fast", 1))
+    {
       /* Select recommended processing options for quick-and-dirty output. */
       cinfo->two_pass_quantize = FALSE;
       cinfo->dither_mode = JDITHER_ORDERED;
@@ -289,46 +306,53 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
         cinfo->desired_number_of_colors = 216;
       cinfo->dct_method = JDCT_FASTEST;
       cinfo->do_fancy_upsampling = FALSE;
-
-    } else if (keymatch(arg, "gif", 1)) {
+    }
+    else if (keymatch(arg, "gif", 1))
+    {
       /* GIF output format (LZW-compressed). */
       requested_fmt = FMT_GIF;
-
-    } else if (keymatch(arg, "gif0", 4)) {
+    }
+    else if (keymatch(arg, "gif0", 4))
+    {
       /* GIF output format (uncompressed). */
       requested_fmt = FMT_GIF0;
-
-    } else if (keymatch(arg, "grayscale", 2) ||
-               keymatch(arg, "greyscale", 2)) {
+    }
+    else if (keymatch(arg, "grayscale", 2) ||
+             keymatch(arg, "greyscale", 2))
+    {
       /* Force monochrome output. */
       cinfo->out_color_space = JCS_GRAYSCALE;
-
-    } else if (keymatch(arg, "rgb", 2)) {
+    }
+    else if (keymatch(arg, "rgb", 2))
+    {
       /* Force RGB output. */
       cinfo->out_color_space = JCS_RGB;
-
-    } else if (keymatch(arg, "rgb565", 2)) {
+    }
+    else if (keymatch(arg, "rgb565", 2))
+    {
       /* Force RGB565 output. */
       cinfo->out_color_space = JCS_RGB565;
-
-    } else if (keymatch(arg, "icc", 1)) {
+    }
+    else if (keymatch(arg, "icc", 1))
+    {
       /* Set ICC filename. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       icc_filename = argv[argn];
-#ifdef SAVE_MARKERS_SUPPORTED
       jpeg_save_markers(cinfo, JPEG_APP0 + 2, 0xFFFF);
-#endif
-
-    } else if (keymatch(arg, "map", 3)) {
+    }
+    else if (keymatch(arg, "map", 3))
+    {
       /* Quantize to a color map taken from an input file. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
-      if (for_real) {           /* too expensive to do twice! */
-#ifdef QUANT_2PASS_SUPPORTED    /* otherwise can't quantize to supplied map */
+      if (for_real)
+      {                      /* too expensive to do twice! */
+#ifdef QUANT_2PASS_SUPPORTED /* otherwise can't quantize to supplied map */
         FILE *mapfile;
 
-        if ((mapfile = fopen(argv[argn], READ_BINARY)) == NULL) {
+        if ((mapfile = fopen(argv[argn], READ_BINARY)) == NULL)
+        {
           fprintf(stderr, "%s: can't open %s\n", progname, argv[argn]);
           exit(EXIT_FAILURE);
         }
@@ -339,45 +363,52 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
         ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif
       }
-
-    } else if (keymatch(arg, "maxmemory", 3)) {
+    }
+    else if (keymatch(arg, "maxmemory", 3))
+    {
       /* Maximum memory in Kb (or Mb with 'm'). */
       long lval;
       char ch = 'x';
 
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%ld%c", &lval, &ch) < 1)
         usage();
       if (ch == 'm' || ch == 'M')
         lval *= 1000L;
       cinfo->mem->max_memory_to_use = lval * 1000L;
-
-    } else if (keymatch(arg, "maxscans", 4)) {
-      if (++argn >= argc)       /* advance to next argument */
+    }
+    else if (keymatch(arg, "maxscans", 4))
+    {
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%u", &max_scans) != 1)
         usage();
-
-    } else if (keymatch(arg, "nosmooth", 3)) {
+    }
+    else if (keymatch(arg, "nosmooth", 3))
+    {
       /* Suppress fancy upsampling */
       cinfo->do_fancy_upsampling = FALSE;
-
-    } else if (keymatch(arg, "onepass", 3)) {
+    }
+    else if (keymatch(arg, "onepass", 3))
+    {
       /* Use fast one-pass quantization. */
       cinfo->two_pass_quantize = FALSE;
-
-    } else if (keymatch(arg, "os2", 3)) {
+    }
+    else if (keymatch(arg, "os2", 3))
+    {
       /* BMP output format (OS/2 flavor). */
       requested_fmt = FMT_OS2;
-
-    } else if (keymatch(arg, "outfile", 4)) {
+    }
+    else if (keymatch(arg, "outfile", 4))
+    {
       /* Set output file name. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       outfilename = argv[argn]; /* save it away for later use */
-
-    } else if (keymatch(arg, "memsrc", 2)) {
+    }
+    else if (keymatch(arg, "memsrc", 2))
+    {
       /* Use in-memory source manager */
 #if JPEG_LIB_VERSION >= 80 || defined(MEM_SRCDST_SUPPORTED)
       memsrc = TRUE;
@@ -386,31 +417,36 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
               progname);
       exit(EXIT_FAILURE);
 #endif
-
-    } else if (keymatch(arg, "pnm", 1) || keymatch(arg, "ppm", 1)) {
+    }
+    else if (keymatch(arg, "pnm", 1) || keymatch(arg, "ppm", 1))
+    {
       /* PPM/PGM output format. */
       requested_fmt = FMT_PPM;
-
-    } else if (keymatch(arg, "report", 2)) {
+    }
+    else if (keymatch(arg, "report", 2))
+    {
       report = TRUE;
-
-    } else if (keymatch(arg, "scale", 2)) {
+    }
+    else if (keymatch(arg, "scale", 2))
+    {
       /* Scale the output image by a fraction M/N. */
-      if (++argn >= argc)       /* advance to next argument */
+      if (++argn >= argc) /* advance to next argument */
         usage();
       if (sscanf(argv[argn], "%u/%u",
                  &cinfo->scale_num, &cinfo->scale_denom) != 2)
         usage();
-
-    } else if (keymatch(arg, "skip", 2)) {
+    }
+    else if (keymatch(arg, "skip", 2))
+    {
       if (++argn >= argc)
         usage();
       if (sscanf(argv[argn], "%u,%u", &skip_start, &skip_end) != 2 ||
           skip_start > skip_end)
         usage();
       skip = TRUE;
-
-    } else if (keymatch(arg, "crop", 2)) {
+    }
+    else if (keymatch(arg, "crop", 2))
+    {
       char c;
       if (++argn >= argc)
         usage();
@@ -419,22 +455,24 @@ parse_switches(j_decompress_ptr cinfo, int argc, char **argv,
           (c != 'X' && c != 'x') || crop_width < 1 || crop_height < 1)
         usage();
       crop = TRUE;
-
-    } else if (keymatch(arg, "strict", 2)) {
+    }
+    else if (keymatch(arg, "strict", 2))
+    {
       strict = TRUE;
-
-    } else if (keymatch(arg, "targa", 1)) {
+    }
+    else if (keymatch(arg, "targa", 1))
+    {
       /* Targa output format. */
       requested_fmt = FMT_TARGA;
-
-    } else {
-      usage();                  /* bogus switch */
+    }
+    else
+    {
+      usage(); /* bogus switch */
     }
   }
 
-  return argn;                  /* return index of next arg (file name) */
+  return argn; /* return index of next arg (file name) */
 }
-
 
 /*
  * Marker processor for COM and interesting APPn markers.
@@ -449,14 +487,14 @@ jpeg_getc(j_decompress_ptr cinfo)
 {
   struct jpeg_source_mgr *datasrc = cinfo->src;
 
-  if (datasrc->bytes_in_buffer == 0) {
-    if (!(*datasrc->fill_input_buffer) (cinfo))
+  if (datasrc->bytes_in_buffer == 0)
+  {
+    if (!(*datasrc->fill_input_buffer)(cinfo))
       ERREXIT(cinfo, JERR_CANT_SUSPEND);
   }
   datasrc->bytes_in_buffer--;
   return *datasrc->next_input_byte++;
 }
-
 
 METHODDEF(boolean)
 print_text_marker(j_decompress_ptr cinfo)
@@ -468,34 +506,46 @@ print_text_marker(j_decompress_ptr cinfo)
 
   length = jpeg_getc(cinfo) << 8;
   length += jpeg_getc(cinfo);
-  length -= 2;                  /* discount the length word itself */
+  length -= 2; /* discount the length word itself */
 
-  if (traceit) {
+  if (traceit)
+  {
     if (cinfo->unread_marker == JPEG_COM)
       fprintf(stderr, "Comment, length %ld:\n", (long)length);
-    else                        /* assume it is an APPn otherwise */
+    else /* assume it is an APPn otherwise */
       fprintf(stderr, "APP%d, length %ld:\n",
               cinfo->unread_marker - JPEG_APP0, (long)length);
   }
 
-  while (--length >= 0) {
+  while (--length >= 0)
+  {
     ch = jpeg_getc(cinfo);
-    if (traceit) {
+    if (traceit)
+    {
       /* Emit the character in a readable form.
        * Nonprintables are converted to \nnn form,
        * while \ is converted to \\.
        * Newlines in CR, CR/LF, or LF form will be printed as one newline.
        */
-      if (ch == '\r') {
+      if (ch == '\r')
+      {
         fprintf(stderr, "\n");
-      } else if (ch == '\n') {
+      }
+      else if (ch == '\n')
+      {
         if (lastch != '\r')
           fprintf(stderr, "\n");
-      } else if (ch == '\\') {
+      }
+      else if (ch == '\\')
+      {
         fprintf(stderr, "\\\\");
-      } else if (isprint(ch)) {
+      }
+      else if (isprint(ch))
+      {
         putc(ch, stderr);
-      } else {
+      }
+      else
+      {
         fprintf(stderr, "\\%03o", ch);
       }
       lastch = ch;
@@ -508,26 +558,26 @@ print_text_marker(j_decompress_ptr cinfo)
   return TRUE;
 }
 
-
 METHODDEF(void)
 my_emit_message(j_common_ptr cinfo, int msg_level)
 {
-  if (msg_level < 0) {
+  if (msg_level < 0)
+  {
     /* Treat warning as fatal */
     cinfo->err->error_exit(cinfo);
-  } else {
+  }
+  else
+  {
     if (cinfo->err->trace_level >= msg_level)
       cinfo->err->output_message(cinfo);
   }
 }
 
-
 /*
  * The main program.
  */
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
   struct jpeg_decompress_struct cinfo;
   struct jpeg_error_mgr jerr;
@@ -544,7 +594,7 @@ main(int argc, char **argv)
 
   progname = argv[0];
   if (progname == NULL || progname[0] == 0)
-    progname = "djpeg";         /* in case C library doesn't provide it */
+    progname = "djpeg"; /* in case C library doesn't provide it */
 
   /* Initialize the JPEG decompression object with default error handling. */
   cinfo.err = jpeg_std_error(&jerr);
@@ -578,15 +628,20 @@ main(int argc, char **argv)
 
 #ifdef TWO_FILE_COMMANDLINE
   /* Must have either -outfile switch or explicit output file name */
-  if (outfilename == NULL) {
-    if (file_index != argc - 2) {
+  if (outfilename == NULL)
+  {
+    if (file_index != argc - 2)
+    {
       fprintf(stderr, "%s: must name one input and one output file\n",
               progname);
       usage();
     }
     outfilename = argv[file_index + 1];
-  } else {
-    if (file_index != argc - 1) {
+  }
+  else
+  {
+    if (file_index != argc - 1)
+    {
       fprintf(stderr, "%s: must name one input and one output file\n",
               progname);
       usage();
@@ -594,35 +649,45 @@ main(int argc, char **argv)
   }
 #else
   /* Unix style: expect zero or one file name */
-  if (file_index < argc - 1) {
+  if (file_index < argc - 1)
+  {
     fprintf(stderr, "%s: only one input file\n", progname);
     usage();
   }
 #endif /* TWO_FILE_COMMANDLINE */
 
   /* Open the input file. */
-  if (file_index < argc) {
-    if ((input_file = fopen(argv[file_index], READ_BINARY)) == NULL) {
+  if (file_index < argc)
+  {
+    if ((input_file = fopen(argv[file_index], READ_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, argv[file_index]);
       exit(EXIT_FAILURE);
     }
-  } else {
+  }
+  else
+  {
     /* default input file is stdin */
     input_file = read_stdin();
   }
 
   /* Open the output file. */
-  if (outfilename != NULL) {
-    if ((output_file = fopen(outfilename, WRITE_BINARY)) == NULL) {
+  if (outfilename != NULL)
+  {
+    if ((output_file = fopen(outfilename, WRITE_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, outfilename);
       exit(EXIT_FAILURE);
     }
-  } else {
+  }
+  else
+  {
     /* default output file is stdout */
     output_file = write_stdout();
   }
 
-  if (report || max_scans != 0) {
+  if (report || max_scans != 0)
+  {
     start_progress_monitor((j_common_ptr)&cinfo, &progress);
     progress.report = report;
     progress.max_scans = max_scans;
@@ -630,16 +695,20 @@ main(int argc, char **argv)
 
   /* Specify data source for decompression */
 #if JPEG_LIB_VERSION >= 80 || defined(MEM_SRCDST_SUPPORTED)
-  if (memsrc) {
+  if (memsrc)
+  {
     size_t nbytes;
-    do {
+    do
+    {
       inbuffer = (unsigned char *)realloc(inbuffer, insize + INPUT_BUF_SIZE);
-      if (inbuffer == NULL) {
+      if (inbuffer == NULL)
+      {
         fprintf(stderr, "%s: memory allocation failure\n", progname);
         exit(EXIT_FAILURE);
       }
       nbytes = fread(&inbuffer[insize], 1, INPUT_BUF_SIZE, input_file);
-      if (nbytes < INPUT_BUF_SIZE && ferror(input_file)) {
+      if (nbytes < INPUT_BUF_SIZE && ferror(input_file))
+      {
         if (file_index < argc)
           fprintf(stderr, "%s: can't read from %s\n", progname,
                   argv[file_index]);
@@ -650,7 +719,8 @@ main(int argc, char **argv)
     } while (nbytes == INPUT_BUF_SIZE);
     fprintf(stderr, "Compressed size:  %lu bytes\n", insize);
     jpeg_mem_src(&cinfo, inbuffer, insize);
-  } else
+  }
+  else
 #endif
     jpeg_stdio_src(&cinfo, input_file);
 
@@ -663,7 +733,8 @@ main(int argc, char **argv)
   /* Initialize the output module now to let it override any crucial
    * option settings (for instance, GIF wants to force color quantization).
    */
-  switch (requested_fmt) {
+  switch (requested_fmt)
+  {
 #ifdef BMP_SUPPORTED
   case FMT_BMP:
     dest_mgr = jinit_write_bmp(&cinfo, FALSE, TRUE);
@@ -700,14 +771,16 @@ main(int argc, char **argv)
   (void)jpeg_start_decompress(&cinfo);
 
   /* Skip rows */
-  if (skip) {
+  if (skip)
+  {
     JDIMENSION tmp;
 
     /* Check for valid skip_end.  We cannot check this value until after
      * jpeg_start_decompress() is called.  Note that we have already verified
      * that skip_start <= skip_end.
      */
-    if (skip_end > cinfo.output_height - 1) {
+    if (skip_end > cinfo.output_height - 1)
+    {
       fprintf(stderr, "%s: skip region exceeds image height %u\n", progname,
               cinfo.output_height);
       exit(EXIT_FAILURE);
@@ -718,36 +791,42 @@ main(int argc, char **argv)
      */
     tmp = cinfo.output_height;
     cinfo.output_height -= (skip_end - skip_start + 1);
-    (*dest_mgr->start_output) (&cinfo, dest_mgr);
+    (*dest_mgr->start_output)(&cinfo, dest_mgr);
     cinfo.output_height = tmp;
 
     /* Process data */
-    while (cinfo.output_scanline < skip_start) {
+    while (cinfo.output_scanline < skip_start)
+    {
       num_scanlines = jpeg_read_scanlines(&cinfo, dest_mgr->buffer,
                                           dest_mgr->buffer_height);
-      (*dest_mgr->put_pixel_rows) (&cinfo, dest_mgr, num_scanlines);
+      (*dest_mgr->put_pixel_rows)(&cinfo, dest_mgr, num_scanlines);
     }
     if ((tmp = jpeg_skip_scanlines(&cinfo, skip_end - skip_start + 1)) !=
-        skip_end - skip_start + 1) {
+        skip_end - skip_start + 1)
+    {
       fprintf(stderr, "%s: jpeg_skip_scanlines() returned %u rather than %u\n",
               progname, tmp, skip_end - skip_start + 1);
       exit(EXIT_FAILURE);
     }
-    while (cinfo.output_scanline < cinfo.output_height) {
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
       num_scanlines = jpeg_read_scanlines(&cinfo, dest_mgr->buffer,
                                           dest_mgr->buffer_height);
-      (*dest_mgr->put_pixel_rows) (&cinfo, dest_mgr, num_scanlines);
+      (*dest_mgr->put_pixel_rows)(&cinfo, dest_mgr, num_scanlines);
     }
 
-  /* Decompress a subregion */
-  } else if (crop) {
+    /* Decompress a subregion */
+  }
+  else if (crop)
+  {
     JDIMENSION tmp;
 
     /* Check for valid crop dimensions.  We cannot check these values until
      * after jpeg_start_decompress() is called.
      */
     if (crop_x + crop_width > cinfo.output_width ||
-        crop_y + crop_height > cinfo.output_height) {
+        crop_y + crop_height > cinfo.output_height)
+    {
       fprintf(stderr, "%s: crop dimensions exceed image dimensions %u x %u\n",
               progname, cinfo.output_width, cinfo.output_height);
       exit(EXIT_FAILURE);
@@ -755,7 +834,7 @@ main(int argc, char **argv)
 
     jpeg_crop_scanline(&cinfo, &crop_x, &crop_width);
     if (dest_mgr->calc_buffer_dimensions)
-      (*dest_mgr->calc_buffer_dimensions) (&cinfo, dest_mgr);
+      (*dest_mgr->calc_buffer_dimensions)(&cinfo, dest_mgr);
     else
       ERREXIT(&cinfo, JERR_UNSUPPORTED_FORMAT);
 
@@ -764,39 +843,45 @@ main(int argc, char **argv)
      */
     tmp = cinfo.output_height;
     cinfo.output_height = crop_height;
-    (*dest_mgr->start_output) (&cinfo, dest_mgr);
+    (*dest_mgr->start_output)(&cinfo, dest_mgr);
     cinfo.output_height = tmp;
 
     /* Process data */
-    if ((tmp = jpeg_skip_scanlines(&cinfo, crop_y)) != crop_y) {
+    if ((tmp = jpeg_skip_scanlines(&cinfo, crop_y)) != crop_y)
+    {
       fprintf(stderr, "%s: jpeg_skip_scanlines() returned %u rather than %u\n",
               progname, tmp, crop_y);
       exit(EXIT_FAILURE);
     }
-    while (cinfo.output_scanline < crop_y + crop_height) {
+    while (cinfo.output_scanline < crop_y + crop_height)
+    {
       num_scanlines = jpeg_read_scanlines(&cinfo, dest_mgr->buffer,
                                           dest_mgr->buffer_height);
-      (*dest_mgr->put_pixel_rows) (&cinfo, dest_mgr, num_scanlines);
+      (*dest_mgr->put_pixel_rows)(&cinfo, dest_mgr, num_scanlines);
     }
     if ((tmp =
-         jpeg_skip_scanlines(&cinfo,
-                             cinfo.output_height - crop_y - crop_height)) !=
-        cinfo.output_height - crop_y - crop_height) {
+             jpeg_skip_scanlines(&cinfo,
+                                 cinfo.output_height - crop_y - crop_height)) !=
+        cinfo.output_height - crop_y - crop_height)
+    {
       fprintf(stderr, "%s: jpeg_skip_scanlines() returned %u rather than %u\n",
               progname, tmp, cinfo.output_height - crop_y - crop_height);
       exit(EXIT_FAILURE);
     }
 
-  /* Normal full-image decompress */
-  } else {
+    /* Normal full-image decompress */
+  }
+  else
+  {
     /* Write output file header */
-    (*dest_mgr->start_output) (&cinfo, dest_mgr);
+    (*dest_mgr->start_output)(&cinfo, dest_mgr);
 
     /* Process data */
-    while (cinfo.output_scanline < cinfo.output_height) {
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
       num_scanlines = jpeg_read_scanlines(&cinfo, dest_mgr->buffer,
                                           dest_mgr->buffer_height);
-      (*dest_mgr->put_pixel_rows) (&cinfo, dest_mgr, num_scanlines);
+      (*dest_mgr->put_pixel_rows)(&cinfo, dest_mgr, num_scanlines);
     }
   }
 
@@ -806,17 +891,21 @@ main(int argc, char **argv)
   if (report || max_scans != 0)
     progress.pub.completed_passes = progress.pub.total_passes;
 
-  if (icc_filename != NULL) {
+  if (icc_filename != NULL)
+  {
     FILE *icc_file;
     JOCTET *icc_profile;
     unsigned int icc_len;
 
-    if ((icc_file = fopen(icc_filename, WRITE_BINARY)) == NULL) {
+    if ((icc_file = fopen(icc_filename, WRITE_BINARY)) == NULL)
+    {
       fprintf(stderr, "%s: can't open %s\n", progname, icc_filename);
       exit(EXIT_FAILURE);
     }
-    if (jpeg_read_icc_profile(&cinfo, &icc_profile, &icc_len)) {
-      if (fwrite(icc_profile, icc_len, 1, icc_file) < 1) {
+    if (jpeg_read_icc_profile(&cinfo, &icc_profile, &icc_len))
+    {
+      if (fwrite(icc_profile, icc_len, 1, icc_file) < 1)
+      {
         fprintf(stderr, "%s: can't read ICC profile from %s\n", progname,
                 icc_filename);
         free(icc_profile);
@@ -825,7 +914,8 @@ main(int argc, char **argv)
       }
       free(icc_profile);
       fclose(icc_file);
-    } else if (cinfo.err->msg_code != JWRN_BOGUS_ICC)
+    }
+    else if (cinfo.err->msg_code != JWRN_BOGUS_ICC)
       fprintf(stderr, "%s: no ICC profile data in JPEG file\n", progname);
   }
 
@@ -833,7 +923,7 @@ main(int argc, char **argv)
    * I must do it in this order because output module has allocated memory
    * of lifespan JPOOL_IMAGE; it needs to finish before releasing memory.
    */
-  (*dest_mgr->finish_output) (&cinfo, dest_mgr);
+  (*dest_mgr->finish_output)(&cinfo, dest_mgr);
   (void)jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
 
@@ -851,5 +941,5 @@ main(int argc, char **argv)
 
   /* All done. */
   exit(jerr.num_warnings ? EXIT_WARNING : EXIT_SUCCESS);
-  return 0;                     /* suppress no-return-value warnings */
+  return 0; /* suppress no-return-value warnings */
 }
